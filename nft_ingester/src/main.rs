@@ -30,11 +30,14 @@ use cadence_macros::{is_global_default_set, statsd_count};
 use chrono::Duration;
 use log::{error, info};
 use plerkle_messenger::{redis_messenger::RedisMessenger, ACCOUNT_STREAM, TRANSACTION_STREAM};
-use tokio::{task::{JoinError, JoinSet}, signal};
+use tokio::{
+    signal,
+    task::{JoinError, JoinSet},
+};
 
 #[tokio::main]
 pub async fn main() -> Result<(), IngesterError> {
-    env_logger::init();
+    // env_logger::init();
     info!("Starting nft_ingester");
     // Setup Configuration and Metrics ---------------------------------------------
     // Pull Env variables into config struct
@@ -82,11 +85,11 @@ pub async fn main() -> Result<(), IngesterError> {
     if let Some(t) = timer_txn.start::<RedisMessenger>().await {
         tasks.spawn(t);
     }
-    
+
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
         let (ack_task, ack_sender) =
-        ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.messenger_config.clone());
+            ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.messenger_config.clone());
         tasks.spawn(ack_task);
         let max_account_workers = config.get_account_stream_worker_count();
         for _ in 0..max_account_workers {
@@ -118,8 +121,7 @@ pub async fn main() -> Result<(), IngesterError> {
     }
     // Backfiller Setup ------------------------------------------
     if role == IngesterRole::Backfiller || role == IngesterRole::All {
-        let backfiller =
-            setup_backfiller::<RedisMessenger>(database_pool.clone(), config.clone());
+        let backfiller = setup_backfiller::<RedisMessenger>(database_pool.clone(), config.clone());
         tasks.spawn(backfiller);
     }
 
@@ -129,14 +131,14 @@ pub async fn main() -> Result<(), IngesterError> {
     }
 
     match signal::ctrl_c().await {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(err) => {
             eprintln!("Unable to listen for shutdown signal: {}", err);
             // we also shut down in case of error
-        },
+        }
     }
 
     tasks.shutdown().await;
-    
+
     Ok(())
 }
