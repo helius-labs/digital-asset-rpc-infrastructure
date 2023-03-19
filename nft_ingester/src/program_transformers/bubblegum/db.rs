@@ -59,8 +59,10 @@ where
         let mut query = cl_items::Entity::insert(item)
             .on_conflict(
                 OnConflict::columns([cl_items::Column::Tree, cl_items::Column::NodeIdx])
-                    .update_columns([cl_items::Column::Hash, cl_items::Column::Seq])
+                    .do_nothing()
                     .to_owned(),
+                    // .update_columns([cl_items::Column::Hash, cl_items::Column::Seq])
+                    // .to_owned(),
             )
             .build(DbBackend::Postgres);
         // if !filling {
