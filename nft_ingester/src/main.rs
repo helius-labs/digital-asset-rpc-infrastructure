@@ -16,7 +16,7 @@ use crate::{
     account_updates::account_worker,
     ack::ack_worker,
     backfiller::setup_backfiller,
-    config::{setup_config, IngesterRole, init_logger},
+    config::{init_logger, setup_config, IngesterRole},
     database::setup_database,
     error::IngesterError,
     metrics::setup_metrics,
@@ -91,11 +91,7 @@ pub async fn main() -> Result<(), IngesterError> {
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
         let (ack_task, ack_sender) =
-<<<<<<< HEAD
-            ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.messenger_config.clone());
-=======
             ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.get_messneger_client_config());
->>>>>>> d50866ee272410c4f878392d8857fcd227aa6d79
         tasks.spawn(ack_task);
         for i in 0..config.get_account_stream_worker_count() {
             let account = account_worker::<RedisMessenger>(

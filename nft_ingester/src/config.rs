@@ -121,5 +121,4 @@ pub fn init_logger() {
         .unwrap();
     let t = tracing_subscriber::fmt().with_env_filter(env_filter);
     t.event_format(fmt::format::json()).init();
-    t.event_format(fmt::format::json()).init();
 }
