@@ -16,7 +16,7 @@ use crate::{
     account_updates::account_worker,
     ack::ack_worker,
     backfiller::setup_backfiller,
-    config::{setup_config, IngesterRole},
+    config::{setup_config, IngesterRole, init_logger},
     database::setup_database,
     error::IngesterError,
     metrics::setup_metrics,
@@ -29,15 +29,17 @@ use crate::config::rand_string;
 use cadence_macros::{is_global_default_set, statsd_count};
 use chrono::Duration;
 use log::{error, info};
-use plerkle_messenger::{redis_messenger::RedisMessenger, ACCOUNT_STREAM, TRANSACTION_STREAM};
+use plerkle_messenger::{
+    redis_messenger::RedisMessenger, ConsumptionType, ACCOUNT_STREAM, TRANSACTION_STREAM,
+};
 use tokio::{
     signal,
     task::{JoinError, JoinSet},
 };
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 pub async fn main() -> Result<(), IngesterError> {
-    // env_logger::init();
+    init_logger();
     info!("Starting nft_ingester");
     // Setup Configuration and Metrics ---------------------------------------------
     // Pull Env variables into config struct
@@ -89,26 +91,41 @@ pub async fn main() -> Result<(), IngesterError> {
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
         let (ack_task, ack_sender) =
+<<<<<<< HEAD
             ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.messenger_config.clone());
+=======
+            ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.get_messneger_client_config());
+>>>>>>> d50866ee272410c4f878392d8857fcd227aa6d79
         tasks.spawn(ack_task);
-        let max_account_workers = config.get_account_stream_worker_count();
-        for _ in 0..max_account_workers {
+        for i in 0..config.get_account_stream_worker_count() {
             let account = account_worker::<RedisMessenger>(
                 database_pool.clone(),
-                ACCOUNT_STREAM,
-                config.messenger_config.clone(),
+                config.get_messneger_client_config(),
                 bg_task_sender.clone(),
                 ack_sender.clone(),
+                if i == 0 {
+                    ConsumptionType::Redeliver
+                } else {
+                    ConsumptionType::New
+                },
             );
             tasks.spawn(account);
         }
-        for _ in 0..config.get_transaction_stream_worker_count() {
+
+        let (tx_ack_task, txn_ack_sender) =
+            ack_worker::<RedisMessenger>(TRANSACTION_STREAM, config.get_messneger_client_config());
+        tasks.spawn(tx_ack_task);
+        for i in 0..config.get_transaction_stream_worker_count() {
             let txn = transaction_worker::<RedisMessenger>(
                 database_pool.clone(),
-                TRANSACTION_STREAM,
-                config.messenger_config.clone(),
+                config.get_messneger_client_config(),
                 bg_task_sender.clone(),
-                ack_sender.clone(),
+                txn_ack_sender.clone(),
+                if i == 0 {
+                    ConsumptionType::Redeliver
+                } else {
+                    ConsumptionType::New
+                },
             );
             tasks.spawn(txn);
         }
@@ -129,11 +146,10 @@ pub async fn main() -> Result<(), IngesterError> {
     metric! {
         statsd_count!("ingester.startup", 1, "role" => &roles_str);
     }
-
     match signal::ctrl_c().await {
         Ok(()) => {}
         Err(err) => {
-            eprintln!("Unable to listen for shutdown signal: {}", err);
+            error!("Unable to listen for shutdown signal: {}", err);
             // we also shut down in case of error
         }
     }
