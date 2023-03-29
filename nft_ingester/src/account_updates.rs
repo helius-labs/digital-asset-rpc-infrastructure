@@ -40,7 +40,7 @@ pub fn account_worker<T: Messenger>(
                         for item in data {
                             tasks.spawn(handle_account(Arc::clone(&manager), item));
                         }
-                        info!("Processed {} account", len);
+                        debug!("Processed {} account", len);
                     }
                     Err(e) => {
                         error!("Error receiving from account stream: {}", e);

@@ -40,7 +40,7 @@ pub fn transaction_worker<T: Messenger>(
                         for item in data {
                             tasks.spawn(handle_transaction(Arc::clone(&manager), item));
                         }
-                        info!("Processed {} txns", len);
+                        debug!("Processed {} txns", len);
                     }
                     Err(e) => {
                         error!("Error receiving from txn stream: {}", e);

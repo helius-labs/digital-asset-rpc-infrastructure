@@ -10,8 +10,6 @@ mod stream;
 pub mod tasks;
 mod transaction_notifications;
 
-use env_logger;
-
 use crate::{
     account_updates::account_worker,
     ack::ack_worker,
@@ -34,7 +32,7 @@ use plerkle_messenger::{
 };
 use tokio::{
     signal,
-    task::{JoinError, JoinSet},
+    task::{JoinSet},
 };
 
 #[tokio::main(flavor = "multi_thread")]
