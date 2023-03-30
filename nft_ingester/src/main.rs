@@ -10,13 +10,11 @@ mod stream;
 pub mod tasks;
 mod transaction_notifications;
 
-use env_logger;
-
 use crate::{
     account_updates::account_worker,
     ack::ack_worker,
     backfiller::setup_backfiller,
-    config::{setup_config, IngesterRole},
+    config::{init_logger, setup_config, IngesterRole},
     database::setup_database,
     error::IngesterError,
     metrics::setup_metrics,
@@ -34,12 +32,12 @@ use plerkle_messenger::{
 };
 use tokio::{
     signal,
-    task::{JoinError, JoinSet},
+    task::{JoinSet},
 };
 
 #[tokio::main(flavor = "multi_thread")]
 pub async fn main() -> Result<(), IngesterError> {
-    env_logger::init();
+    init_logger();
     info!("Starting nft_ingester");
     // Setup Configuration and Metrics ---------------------------------------------
     // Pull Env variables into config struct
@@ -91,8 +89,7 @@ pub async fn main() -> Result<(), IngesterError> {
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
         let (ack_task, ack_sender) =
-            ack_worker::<RedisMessenger>(ACCOUNT_STREAM, config.get_messneger_client_config());
-        tasks.spawn(ack_task);
+            ack_worker::<RedisMessenger>(config.get_messneger_client_config());
         for i in 0..config.get_account_stream_worker_count() {
             let account = account_worker::<RedisMessenger>(
                 database_pool.clone(),
@@ -105,25 +102,19 @@ pub async fn main() -> Result<(), IngesterError> {
                     ConsumptionType::New
                 },
             );
-            tasks.spawn(account);
         }
-
-        let (tx_ack_task, txn_ack_sender) =
-            ack_worker::<RedisMessenger>(TRANSACTION_STREAM, config.get_messneger_client_config());
-        tasks.spawn(tx_ack_task);
         for i in 0..config.get_transaction_stream_worker_count() {
             let txn = transaction_worker::<RedisMessenger>(
                 database_pool.clone(),
                 config.get_messneger_client_config(),
                 bg_task_sender.clone(),
-                txn_ack_sender.clone(),
+                ack_sender.clone(),
                 if i == 0 {
                     ConsumptionType::Redeliver
                 } else {
                     ConsumptionType::New
                 },
             );
-            tasks.spawn(txn);
         }
     }
     // Stream Size Timers ----------------------------------------
