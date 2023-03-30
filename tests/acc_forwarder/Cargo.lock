@@ -13,6 +13,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "acc_forwarder"
+version = "0.6.9"
+dependencies = [
+ "base64 0.20.0",
+ "bs58",
+ "clap 4.1.4",
+ "figment",
+ "flatbuffers",
+ "futures",
+ "futures-util",
+ "plerkle_messenger",
+ "plerkle_serialization",
+ "redis",
+ "serde_json",
+ "solana-client",
+ "solana-sdk",
+ "solana-transaction-status",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4008,29 +4031,6 @@ dependencies = [
  "utf-8",
  "webpki",
  "webpki-roots",
-]
-
-[[package]]
-name = "txn_forwarder"
-version = "0.6.9"
-dependencies = [
- "base64 0.20.0",
- "bs58",
- "clap 4.1.4",
- "figment",
- "flatbuffers",
- "futures",
- "futures-util",
- "plerkle_messenger",
- "plerkle_serialization",
- "redis",
- "serde_json",
- "solana-client",
- "solana-sdk",
- "solana-transaction-status",
- "thiserror",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
