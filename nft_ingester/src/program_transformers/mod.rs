@@ -144,7 +144,6 @@ impl ProgramTransformer {
         &self,
         acct: AccountInfo<'b>,
     ) -> Result<(), IngesterError> {
-        info!("Handling Account: {:?}", acct.pubkey());
         let owner = acct.owner().unwrap();
         if let Some(program) = self.match_program(owner) {
             let result = program.handle_account(&acct)?;
