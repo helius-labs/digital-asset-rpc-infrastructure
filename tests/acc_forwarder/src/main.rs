@@ -71,19 +71,20 @@ pub async fn send_account(
     messenger: &mut Box<dyn plerkle_messenger::Messenger>,
 ) {
     let account = Pubkey::from_str(account).expect("Failed to parse mint as pubkey");
-    let account_data: Account = client
+    let get_account_response = client
         .get_account_with_commitment(&account, CommitmentConfig::confirmed())
         .await
-        .expect("Failed to get account")
-        .value
-        .expect("Account not found");
+        .expect("Failed to get account");
+    let account_data = get_account_response.value.expect("Account not found");
+    let slot = get_account_response.context.slot;
 
-    send(account, account_data, messenger).await
+    send(account, account_data, slot, messenger).await
 }
 
 pub async fn send(
     pubkey: Pubkey,
     account_data: Account,
+    slot: u64,
     messenger: &mut Box<dyn plerkle_messenger::Messenger>,
 ) {
     let fbb = flatbuffers::FlatBufferBuilder::new();
@@ -98,7 +99,6 @@ pub async fn send(
         write_version: 0,
         txn_signature: None,
     };
-    let slot = 0;
     let is_startup = false;
 
     let fbb = serialize_account(fbb, &account_info, slot, is_startup);
