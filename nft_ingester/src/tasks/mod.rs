@@ -141,7 +141,7 @@ impl TaskManager {
                         metric! {
                             statsd_count!("ingester.bgtask.unrecoverable_error", 1, "type" => task_name);
                         }
-                        warn!("Task failed due to unrecoverable error: {}",  e);
+                        warn!("{}",  e);
                     },
                     _ => {
                         metric! {
