@@ -83,6 +83,7 @@ impl BgTask for DownloadMetadataTask {
         db: &DatabaseConnection,
         data: serde_json::Value,
     ) -> Result<(), IngesterError> {
+        debug!("DownloadMetadataTask::task({:?})", data);
         let download_metadata: DownloadMetadata = serde_json::from_value(data)?;
         let meta_url = Url::parse(&download_metadata.uri);
         let body = match meta_url {

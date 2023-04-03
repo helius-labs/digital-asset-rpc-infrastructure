@@ -129,12 +129,12 @@ impl TaskManager {
                     metric! {
                         statsd_count!("ingester.bgtask.network_error", 1, "type" => task_name);
                     }
-                    warn!("Task failed due to network error: {}",  e);
+                    warn!("Task failed due to network error: {}", e);
                 } else {
                     metric! {
                         statsd_count!("ingester.bgtask.error", 1, "type" => task_name);
                     }
-                    error!("Task Run Error: {}",  e);
+                    error!("Task Run Error: {}", e);
                 }
             }
         }
@@ -294,10 +294,9 @@ impl TaskManager {
         })
     }
 
-    pub fn start_runner(&self) -> JoinHandle<()> {
-        let task_map = self.registered_task_types.clone();
+    // purge hour old tasks every 30 seconds from postgres 'tasks' table
+    fn purge_task_runner(&self) {
         let pool = self.pool.clone();
-        let instance_name = self.instance_name.clone();
         tokio::spawn(async move {
             let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
             let mut interval = time::interval(tokio::time::Duration::from_millis(DELETE_INTERVAL));
@@ -314,49 +313,80 @@ impl TaskManager {
                 };
             }
         });
+    }
+    pub fn start_runner(&self) -> JoinHandle<()> {
+        self.purge_task_runner();
+
         let pool = self.pool.clone();
+        let task_map = self.registered_task_types.clone();
+        let instance_name = self.instance_name.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(tokio::time::Duration::from_millis(RETRY_INTERVAL));
             let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
             loop {
                 interval.tick().await; // ticks immediately
                 let tasks_res = TaskManager::get_pending_tasks(&conn).await;
+                // if let Err(e) = tasks_res {
+                //     error!("Error getting pending tasks: {}", e);
+                //     continue;
+                // }
+                // let tasks = tasks_res.unwrap();
                 match tasks_res {
                     Ok(tasks) => {
                         debug!("tasks that need to be executed: {}", tasks.len());
-                        let _task_map_clone = task_map.clone();
-                        let instance_name = instance_name.clone();
                         for task in tasks {
-                            let task_map_clone = task_map.clone();
-                            let instance_name_clone = instance_name.clone();
+                            // clone required since each task needs to 'own' their values
+                            let task_map = task_map.clone();
+                            let instance_name = instance_name.clone();
                             let pool = pool.clone();
+                            // wont this pool up? can i await
                             tokio::task::spawn(async move {
-                                if let Some(task_executor) =
-                                    task_map_clone.clone().get(&*task.task_type)
-                                {
-                                    let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-                                    let mut active_model: tasks::ActiveModel = task.into();
-                                    TaskManager::lock_task(
-                                        &mut active_model,
-                                        Duration::seconds(task_executor.lock_duration()),
-                                        instance_name_clone,
-                                    );
-                                    // can ignore as txn will bubble up errors
-                                    let active_model =
-                                        TaskManager::save_task(&conn, active_model).await?;
-                                    let model = TaskManager::execute_task(
-                                        &conn,
-                                        task_executor,
-                                        active_model,
-                                    )
-                                    .await?;
-                                    TaskManager::save_task(&conn, model).await?;
-                                    return Ok(());
+                                match task_map.get(&task.task_type) {
+                                    Some(task_executor) => {
+                                        let conn =
+                                            SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+                                        let mut active_model: tasks::ActiveModel = task.into();
+                                        TaskManager::lock_task(
+                                            &mut active_model,
+                                            Duration::seconds(task_executor.lock_duration()),
+                                            instance_name,
+                                        );
+                                        // can ignore as txn will bubble up errors
+                                        let active_model =
+                                            TaskManager::save_task(&conn, active_model)
+                                                .await
+                                                .map_err(|e| {
+                                                    error!("Failed to save task: {:?}", e);
+                                                    return e;
+                                                })?;
+                                        let model = TaskManager::execute_task(
+                                            &conn,
+                                            task_executor,
+                                            active_model,
+                                        )
+                                        .await
+                                        .map_err(|e| {
+                                            error!("Failed to execute task: {:?}", e);
+                                            return e;
+                                        })?;
+                                        TaskManager::save_task(&conn, model).await.map_err(
+                                            |e| {
+                                                error!("Failed to execute task: {:?}", e);
+                                                return e;
+                                            },
+                                        )?;
+
+                                        return Ok(());
+                                    }
+                                    None => {
+                                        let e = Err(IngesterError::TaskManagerError(format!(
+                                            "{} not a valid task type",
+                                            task.task_type
+                                        )));
+                                        error!("{:?}", e);
+                                        return e;
+                                    }
                                 }
-                                Err(IngesterError::TaskManagerError(format!(
-                                    "{} not a valid task type",
-                                    task.task_type
-                                )))
                             });
                         }
                     }
