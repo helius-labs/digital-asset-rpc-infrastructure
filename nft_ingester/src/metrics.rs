@@ -2,7 +2,7 @@ use std::net::UdpSocket;
 
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
 use cadence_macros::{is_global_default_set, set_global_default, statsd_count, statsd_time};
-use log::error;
+use log::{error, warn};
 use tokio::time::Instant;
 
 use crate::{
@@ -75,18 +75,18 @@ pub fn capture_result(
             metric! {
                 statsd_count!("ingester.ingest_error", 1, label.0 => &label.1, "stream" => stream, "error" => "de");
             }
-            error!("{}", e);
+            warn!("{}", e);
             ret_id = Some(id);
         }
         Err(IngesterError::ParsingError(e)) => {
             metric! {
                 statsd_count!("ingester.ingest_error", 1, label.0 => &label.1, "stream" => stream, "error" => "parse");
             }
-            error!("{}", e);
+            warn!("{}", e);
             ret_id = Some(id);
         }
         Err(err) => {
-            error!("Error handling account update: {:?}", err);
+            warn!("Error handling account update: {:?}", err);
             metric! {
                 statsd_count!("ingester.ingest_update_error", 1, label.0 => &label.1, "stream" => stream, "error" => "u");
             }
