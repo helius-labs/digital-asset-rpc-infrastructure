@@ -1,10 +1,10 @@
-use std::str::FromStr;
+use std::{error::Error, str::FromStr};
 
 use clap::Parser;
 
 use figment::{map, value::Value};
 use mpl_token_metadata::pda::find_metadata_account;
-use plerkle_messenger::MessengerConfig;
+use plerkle_messenger::{Messenger, MessengerConfig};
 use plerkle_serialization::{
     serializer::serialize_account, solana_geyser_plugin_interface_shims::ReplicaAccountInfoV2,
 };
@@ -36,6 +36,10 @@ enum Action {
         #[arg(long)]
         scenario_file: String,
     },
+    MintScenario {
+        #[arg(long)]
+        scenario_file: String,
+    },
 }
 const STREAM: &str = "ACC";
 
@@ -63,17 +67,7 @@ async fn main() {
 
     match cmd {
         Action::Single { account } => send_account(&account, &client, &mut messenger).await,
-        Action::Mint { mint } => {
-            let mint_key = Pubkey::from_str(&mint).expect("Failed to parse mint as pubkey");
-            let metadata_account = find_metadata_account(&mint_key).0.to_string();
-
-            let token_account = get_token_account(&client.url(), &mint).await;
-
-            let mint_accounts = vec![mint, metadata_account, token_account];
-            for account in mint_accounts {
-                send_account(&account, &client, &mut messenger).await;
-            }
-        }
+        Action::Mint { mint } => send_mint(mint, &client, &mut messenger).await,
         Action::Scenario { scenario_file } => {
             let scenario = std::fs::read_to_string(scenario_file).unwrap();
             let scenario: Vec<String> = scenario.lines().map(|s| s.to_string()).collect();
@@ -81,40 +75,80 @@ async fn main() {
                 send_account(&account, &client, &mut messenger).await;
             }
         }
+        Action::MintScenario { scenario_file } => {
+            let scenario = std::fs::read_to_string(scenario_file).unwrap();
+            let scenario: Vec<String> = scenario.lines().map(|s| s.to_string()).collect();
+            for account in scenario {
+                send_mint(account, &client, &mut messenger).await;
+            }
+        }
+    }
+}
+
+pub async fn send_mint(mint: String, client: &RpcClient, messenger: &mut Box<dyn Messenger>) {
+    let mint_key = match Pubkey::from_str(&mint) {
+        Ok(key) => key,
+        Err(err) => {
+            println!("Failed to parse mint as pubkey, {}", err);
+            return;
+        }
+    };
+    let metadata_account = find_metadata_account(&mint_key).0.to_string();
+
+    let token_account = match get_token_account(&client.url(), &mint).await {
+        Ok(acc) => acc,
+        Err(_) => {
+            println!("Failed to get token account");
+            return;
+        }
+    };
+
+    let mint_accounts = vec![mint, metadata_account, token_account];
+    for account in mint_accounts {
+        send_account(&account, client, messenger).await;
     }
 }
 
 // returns token account belonging to mint
-pub async fn get_token_account(endpoint: &str, mint: &str) -> String {
-    let client = reqwest::Client::new();
-    let body = json!({
-        "jsonrpc": "2.0",
-        "id": "acc-forwarder",
-        "method": "getTokenLargestAccounts",
-        "params": [mint]
-    });
+pub async fn get_token_account(endpoint: &str, mint: &str) -> Result<String, ()> {
+    let mut count = 0;
+    while count < 3 {
+        let client = reqwest::Client::new();
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": "acc-forwarder",
+            "method": "getTokenLargestAccounts",
+            "params": [mint]
+        });
 
-    let result = client
-        .post(endpoint)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|err| {
-            println!("Failed to call rpc for getTokenLargestAccounts, {}", err);
-        })
-        .unwrap();
+        let result = match client.post(endpoint).json(&body).send().await {
+            Ok(res) => res,
+            Err(err) => {
+                println!("Failed to send request to getTokenLargestAccounts, {}", err);
+                count += 1;
+                continue;
+            }
+        };
 
-    let result = result
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|err| {
-            println!("Failed to parse json for getTokenLargestAccounts, {}", err);
-        })
-        .unwrap();
-    result["result"]["value"][0]["address"]
-        .as_str()
-        .unwrap_or_else(|| "")
-        .to_string()
+        let result = match result.json::<serde_json::Value>().await {
+            Ok(res) => res,
+            Err(err) => {
+                println!(
+                    "Failed to parse response from getTokenLargestAccounts, {}",
+                    err
+                );
+                count += 1;
+                continue;
+            }
+        };
+
+        let res = result["result"]["value"][0]["address"].as_str();
+        if res.is_none() {
+            return Err(());
+        }
+        return Ok(res.unwrap().to_string());
+    }
+    Err(())
 }
 pub async fn send_account(
     account: &str,
@@ -122,13 +156,24 @@ pub async fn send_account(
     messenger: &mut Box<dyn plerkle_messenger::Messenger>,
 ) {
     let account_key = Pubkey::from_str(account).expect("Failed to parse mint as pubkey");
-    let get_account_response = client
+    let get_account_response = match client
         .get_account_with_commitment(&account_key, CommitmentConfig::confirmed())
         .await
-        .expect("Failed to get account");
-    let account_data = get_account_response
-        .value
-        .expect(&format!("Account {} not found", account));
+    {
+        Ok(res) => res,
+        Err(err) => {
+            println!("Failed to get account, {}", err);
+            return;
+        }
+    };
+
+    let account_data = match get_account_response.value {
+        Some(acc) => acc,
+        None => {
+            println!("Account not found");
+            return;
+        }
+    };
     let slot = get_account_response.context.slot;
 
     send(account_key, account_data, slot, messenger).await

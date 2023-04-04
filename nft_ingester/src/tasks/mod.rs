@@ -123,18 +123,21 @@ impl TaskManager {
                 task.errors = Set(Some(e.to_string()));
                 task.locked_until = Set(None);
 
-                if e == IngesterError::BatchInitNetworkingError {
-                    // Network errors are common for off-chain JSONs.
-                    // Logging these as errors is far too noisy.
-                    metric! {
-                        statsd_count!("ingester.bgtask.network_error", 1, "type" => task_name);
+                match e {
+                    IngesterError::BatchInitNetworkingError(err) => {
+                        // Network errors are common for off-chain JSONs.
+                        // Logging these as errors is far too noisy.
+                        metric! {
+                            statsd_count!("ingester.bgtask.network_error", 1, "type" => task_name);
+                        }
+                        warn!("Task failed due to network error: {}", err);
                     }
-                    warn!("Task failed due to network error: {}", e);
-                } else {
-                    metric! {
-                        statsd_count!("ingester.bgtask.error", 1, "type" => task_name);
+                    _ => {
+                        metric! {
+                            statsd_count!("ingester.bgtask.error", 1, "type" => task_name);
+                        }
+                        error!("Task Run Error: {}", e);
                     }
-                    error!("Task Run Error: {}", e);
                 }
             }
         }

@@ -12,8 +12,8 @@ pub enum IngesterError {
     ChangeLogEventMalformed,
     #[error("Compressed Asset Event Malformed")]
     CompressedAssetEventMalformed,
-    #[error("Error downloading batch files")]
-    BatchInitNetworkingError,
+    #[error("Error downloading batch files {0}")]
+    BatchInitNetworkingError(String),
     #[error("Error writing batch files")]
     BatchInitIOError,
     #[error("Storage listener error: ({msg})")]
@@ -51,8 +51,8 @@ pub enum IngesterError {
 }
 
 impl From<reqwest::Error> for IngesterError {
-    fn from(_err: reqwest::Error) -> Self {
-        IngesterError::BatchInitNetworkingError
+    fn from(err: reqwest::Error) -> Self {
+        IngesterError::BatchInitNetworkingError(err.to_string())
     }
 }
 
