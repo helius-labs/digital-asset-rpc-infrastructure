@@ -16,7 +16,6 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
-use log::debug;
 use num_traits::FromPrimitive;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{
@@ -26,16 +25,6 @@ use sea_orm::{
 use std::collections::HashSet;
 
 use crate::tasks::{DownloadMetadata, IntoTaskData};
-use sea_orm::{FromQueryResult, JoinType};
-
-#[derive(FromQueryResult, Debug)]
-struct OwnershipTokenModel {
-    supply: i64,
-    mint: Vec<u8>,
-    owner: Vec<u8>,
-    delegate: Option<Vec<u8>>,
-    token_account_amount: i64,
-}
 
 pub async fn burn_v1_asset<T: ConnectionTrait + TransactionTrait>(
     conn: &T,
