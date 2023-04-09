@@ -99,94 +99,38 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         _ => OwnerType::Single,
     };
 
-    let token_result: Option<(tokens::Model, Option<token_accounts::Model>)> = match ownership_type
-    {
-        OwnerType::Single => {
-            let selector = tokens::Entity::find_by_id(mint.clone())
-                .column_as(token_accounts::Column::Amount, "token_account_amount")
-                .column_as(token_accounts::Column::Owner, "owner")
-                .column_as(token_accounts::Column::Delegate, "delegate")
-                .join(
-                    JoinType::InnerJoin,
-                    tokens::Entity::belongs_to(token_accounts::Entity)
-                        .from(tokens::Column::Mint)
-                        .to(token_accounts::Column::Mint)
-                        .into(),
-                )
-                .filter(token_accounts::Column::Amount.gt(0));
-            debug!("{:?}", selector);
-            debug!("{:?}", selector.build(DbBackend::Postgres).to_string());
-            let result: Option<OwnershipTokenModel> = selector
-                .into_model::<OwnershipTokenModel>()
-                .one(conn)
-                .await?;
-            debug!("{:?}", result);
-            let selector1 = tokens::Entity::find_by_id(mint.clone());
-            debug!("{:?}", selector1);
-            debug!("{:?}", selector1.build(DbBackend::Postgres).to_string());
-            let result1: Option<tokens::Model> = selector1.one(conn).await?;
-            debug!("{:?}", result1);
-            if let Some(res) = result1 {
-                debug!("{:?}", res);
-                debug!("{:?}", res.supply);
+    // gets the token and token account for the mint to populate the asset. This is required when the token and token account are indexed, but not the metadata account. If the metadata account is indexed, then the token and ta ingester will update the asset with the correct data
+    let (token, token_account): (Option<tokens::Model>, Option<token_accounts::Model>) =
+        match ownership_type {
+            OwnerType::Single => {
+                let token: Option<tokens::Model> =
+                    tokens::Entity::find_by_id(mint.clone()).one(conn).await?;
+                let token_account: Option<token_accounts::Model> =
+                    token_accounts::Entity::find_by_id(mint.clone())
+                        .filter(token_accounts::Column::Amount.gt(0))
+                        .one(conn)
+                        .await?;
+                Ok((token, token_account))
             }
-            let selector2 = token_accounts::Entity::find_by_id(mint.clone())
-                .filter(token_accounts::Column::Amount.gt(0));
-            debug!("{:?}", selector2);
-            debug!("{:?}", selector2.build(DbBackend::Postgres).to_string());
-            let result2: Option<token_accounts::Model> = selector2.one(conn).await?;
-            debug!("{:?}", result2);
-
-            Ok(result.map(|t| {
-                let token = tokens::Model {
-                    mint: t.mint.clone(),
-                    supply: t.supply,
-                    //Not Needed here
-                    decimals: 0,
-                    token_program: vec![],
-                    mint_authority: None,
-                    freeze_authority: None,
-                    close_authority: None,
-                    extension_data: None,
-                    slot_updated: 0,
-                };
-                let token_account = token_accounts::Model {
-                    pubkey: vec![],
-                    mint: t.mint,
-                    owner: t.owner,
-                    amount: t.token_account_amount,
-                    delegate: t.delegate,
-                    //Not Needed here
-                    frozen: false,
-                    close_authority: None,
-                    delegated_amount: 0,
-                    slot_updated: 0,
-                    token_program: vec![],
-                };
-                (token, Some(token_account))
-            }))
+            _ => {
+                let token = tokens::Entity::find_by_id(mint.clone()).one(conn).await?;
+                Ok((token, None))
+            }
         }
-        _ => {
-            let token = tokens::Entity::find_by_id(mint.clone()).one(conn).await?;
-            Ok(token.map(|t| (t, None)))
-        }
-    }
-    .map_err(|e: DbErr| IngesterError::DatabaseError(e.to_string()))?;
+        .map_err(|e: DbErr| IngesterError::DatabaseError(e.to_string()))?;
 
     // get supply of token, default to 1 since most cases will be NFTs. Token mint ingester will properly set supply if token_result is None
-    let (supply, supply_mint) = match token_result.clone() {
-        Some((token, _)) => (Set(token.supply), Set(Some(mint))),
+    let (supply, supply_mint) = match token {
+        Some(t) => (Set(t.supply), Set(Some(t.mint))),
         None => (Set(1), NotSet),
     };
 
     // owner and delegate should be from the token account with the mint
-    let (owner, delegate) = match token_result {
-        Some((_token, token_account)) => match token_account {
-            Some(account) => (Set(Some(account.owner)), Set(account.delegate)),
-            None => (NotSet, NotSet),
-        },
+    let (owner, delegate) = match token_account {
+        Some(ta) => (Set(Some(ta.owner)), Set(ta.delegate)),
         None => (NotSet, NotSet),
     };
+
     let mut chain_data = ChainDataV1 {
         name: data.name,
         symbol: data.symbol,
