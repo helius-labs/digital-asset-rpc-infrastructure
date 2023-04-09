@@ -7,7 +7,7 @@ use sea_orm::{
     DatabaseConnection, DbBackend, EntityTrait,
 };
 use solana_sdk::program_option::COption;
-use spl_token::state::{AccountState, Mint, Account};
+use spl_token::state::{Account, AccountState, Mint};
 use tokio::sync::mpsc::UnboundedSender;
 
 pub async fn handle_token_program_account<'a, 'b, 'c>(
@@ -72,9 +72,12 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 .one(&txn)
                 .await?;
             if let Some(asset) = asset_update {
-                let mut active: asset::ActiveModel = asset.into();
-                active.owner = Set(Some(owner));
-                active.save(&txn).await?;
+                // will only update owner if token account balance is non-zero
+                if ta.amount > 0 {
+                    let mut active: asset::ActiveModel = asset.into();
+                    active.owner = Set(Some(owner));
+                    active.save(&txn).await?;
+                }
             }
             txn.commit().await?;
             Ok(())

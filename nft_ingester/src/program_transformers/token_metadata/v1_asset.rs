@@ -112,6 +112,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                         .to(token_accounts::Column::Mint)
                         .into(),
                 )
+                .filter(token_accounts::Column::Amount.gt(0))
                 .into_model::<OwnershipTokenModel>()
                 .one(conn)
                 .await?;
@@ -152,17 +153,13 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     }
     .map_err(|e: DbErr| IngesterError::DatabaseError(e.to_string()))?;
 
+    // get supply of token, default to 1 since most cases will be NFTs. Token mint ingester will properly set supply if token_result is None
     let (supply, supply_mint) = match token_result.clone() {
-        Some((token, token_account)) => {
-            let supply = match token_account {
-                Some(ta) => ta.amount,
-                None => token.supply,
-            };
-            (Set(supply), Set(Some(mint)))
-        }
+        Some((token, _)) => (Set(token.supply), Set(Some(mint))),
         None => (Set(1), NotSet),
     };
 
+    // owner and delegate should be from the token account with the mint
     let (owner, delegate) = match token_result {
         Some((_token, token_account)) => match token_account {
             Some(account) => (Set(Some(account.owner)), Set(account.delegate)),
