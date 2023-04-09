@@ -16,6 +16,7 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
+use log::debug;
 use num_traits::FromPrimitive;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{
@@ -27,7 +28,7 @@ use std::collections::HashSet;
 use crate::tasks::{DownloadMetadata, IntoTaskData};
 use sea_orm::{FromQueryResult, JoinType};
 
-#[derive(FromQueryResult)]
+#[derive(FromQueryResult, Debug)]
 struct OwnershipTokenModel {
     supply: i64,
     mint: Vec<u8>,
@@ -101,7 +102,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     let token_result: Option<(tokens::Model, Option<token_accounts::Model>)> = match ownership_type
     {
         OwnerType::Single => {
-            let result: Option<OwnershipTokenModel> = tokens::Entity::find_by_id(mint.clone())
+            let selector = tokens::Entity::find_by_id(mint.clone())
                 .column_as(token_accounts::Column::Amount, "token_account_amount")
                 .column_as(token_accounts::Column::Owner, "owner")
                 .column_as(token_accounts::Column::Delegate, "delegate")
@@ -112,10 +113,29 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                         .to(token_accounts::Column::Mint)
                         .into(),
                 )
-                .filter(token_accounts::Column::Amount.gt(0))
+                .filter(token_accounts::Column::Amount.gt(0));
+            debug!("{:?}", selector);
+            debug!("{:?}", selector.build(DbBackend::Postgres).to_string());
+            let result: Option<OwnershipTokenModel> = selector
                 .into_model::<OwnershipTokenModel>()
                 .one(conn)
                 .await?;
+            debug!("{:?}", result);
+            let selector1 = tokens::Entity::find_by_id(mint.clone());
+            debug!("{:?}", selector1);
+            debug!("{:?}", selector1.build(DbBackend::Postgres).to_string());
+            let result1: Option<tokens::Model> = selector1.one(conn).await?;
+            debug!("{:?}", result1);
+            if let Some(res) = result1 {
+                debug!("{:?}", res);
+                debug!("{:?}", res.supply);
+            }
+            let selector2 = token_accounts::Entity::find_by_id(mint.clone())
+                .filter(token_accounts::Column::Amount.gt(0));
+            debug!("{:?}", selector2);
+            debug!("{:?}", selector2.build(DbBackend::Postgres).to_string());
+            let result2: Option<token_accounts::Model> = selector2.one(conn).await?;
+            debug!("{:?}", result2);
 
             Ok(result.map(|t| {
                 let token = tokens::Model {
