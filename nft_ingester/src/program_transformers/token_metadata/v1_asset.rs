@@ -100,6 +100,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     };
 
     // gets the token and token account for the mint to populate the asset. This is required when the token and token account are indexed, but not the metadata account. If the metadata account is indexed, then the token and ta ingester will update the asset with the correct data
+
     let (token, token_account): (Option<tokens::Model>, Option<token_accounts::Model>) =
         match ownership_type {
             OwnerType::Single => {
