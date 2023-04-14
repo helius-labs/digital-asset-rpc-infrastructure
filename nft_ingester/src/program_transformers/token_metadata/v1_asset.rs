@@ -104,7 +104,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
 
                 debug!("token: {:?}, token_account: {:?}", token, token_account);
                 let token_account_2: Option<token_accounts::Model> = token_accounts::Entity::find()
-                    .filter(token_accounts::Column::Mint.eq(mint.clone()))
+                    .filter(token_accounts::Column::Mint.eq(mint))
                     .one(conn)
                     .await?;
                 debug!("token_account2: {:?}", token_account_2);
