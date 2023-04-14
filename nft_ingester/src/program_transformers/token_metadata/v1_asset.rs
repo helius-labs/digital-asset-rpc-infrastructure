@@ -16,7 +16,6 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
-use log::debug;
 use num_traits::FromPrimitive;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{
@@ -96,19 +95,12 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             OwnerType::Single => {
                 let token: Option<tokens::Model> =
                     tokens::Entity::find_by_id(mint.clone()).one(conn).await?;
+                // query for token account associated with mint with positive balance
                 let token_account: Option<token_accounts::Model> = token_accounts::Entity::find()
                     .filter(token_accounts::Column::Mint.eq(mint.clone()))
                     .filter(token_accounts::Column::Amount.gt(0))
                     .one(conn)
                     .await?;
-
-                debug!("token: {:?}, token_account: {:?}", token, token_account);
-
-                let token_account_2: Option<token_accounts::Model> =
-                    token_accounts::Entity::find_by_id(mint.clone())
-                        .one(conn)
-                        .await?;
-                debug!("token_account2: {:?}", token_account_2);
                 Ok((token, token_account))
             }
             _ => {
@@ -129,7 +121,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         Some(ta) => (Set(Some(ta.owner)), Set(ta.delegate)),
         None => (NotSet, NotSet),
     };
-    debug!("owner: {:?}, delegate: {:?}", owner, delegate);
 
     let mut chain_data = ChainDataV1 {
         name: data.name,
