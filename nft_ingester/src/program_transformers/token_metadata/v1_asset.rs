@@ -296,19 +296,20 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             txn.execute(query).await?;
         }
     }
-    txn.commit().await?;
     let creators = data.creators.unwrap_or_default();
     if !creators.is_empty() {
         let mut creators_set = HashSet::new();
-        let existing_creators: Vec<asset_creators::Model> = asset_creators::Entity::find()
+        // check if newer creators have been added
+        let newer_creators: Vec<asset_creators::Model> = asset_creators::Entity::find()
             .filter(
                 Condition::all()
                     .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
+                    .add(asset_creators::Column::SlotUpdated.gte(slot_i)),
             )
             .all(conn)
             .await?;
-        if existing_creators.len() > 0 {
+        // verify that the data we have is the latest and reindex all creators belonging to asset
+        if newer_creators.len() == 0 {
             let mut db_creators = Vec::with_capacity(creators.len());
             for (i, c) in creators.into_iter().enumerate() {
                 if creators_set.contains(&c.address) {
@@ -326,7 +327,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 });
                 creators_set.insert(c.address);
             }
-            let txn = conn.begin().await?;
             asset_creators::Entity::delete_many()
                 .filter(
                     Condition::all()
@@ -358,9 +358,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 );
                 txn.execute(query).await?;
             }
-            txn.commit().await?;
         }
     }
+    txn.commit().await?;
     let mut task = DownloadMetadata {
         asset_data_id: id.to_vec(),
         uri,
