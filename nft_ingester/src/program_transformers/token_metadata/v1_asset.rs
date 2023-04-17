@@ -296,69 +296,68 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             txn.execute(query).await?;
         }
     }
+
     let creators = data.creators.unwrap_or_default();
-    if !creators.is_empty() {
-        let mut creators_set = HashSet::new();
-        // check if newer creators have been added
-        let newer_creators: Vec<asset_creators::Model> = asset_creators::Entity::find()
+
+    // checks if the creator to index is outdated. This assumes that all creator rows with same AssetId have the same SlotUpdated
+    let creator_outdated = asset_creators::Entity::find()
+        .filter(
+            Condition::all()
+                .add(asset_creators::Column::AssetId.eq(id.to_vec()))
+                .add(asset_creators::Column::SlotUpdated.gte(slot_i)),
+        )
+        .one(conn)
+        .await?
+        .is_some();
+
+    // this operation completely deletes and re-inserts the creators. This is required instead of an upsert because the length of the creators array can change
+    if !creators.is_empty() && !creator_outdated {
+        // delete old creators
+        let delete_query = asset_creators::Entity::delete_many()
             .filter(
                 Condition::all()
                     .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                    .add(asset_creators::Column::SlotUpdated.gte(slot_i)),
+                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
             )
-            .all(conn)
-            .await?;
-        // verify that the data we have is the latest and reindex all creators belonging to asset
-        if newer_creators.len() == 0 {
-            let mut db_creators = Vec::with_capacity(creators.len());
-            for (i, c) in creators.into_iter().enumerate() {
-                if creators_set.contains(&c.address) {
-                    continue;
-                }
-                db_creators.push(asset_creators::ActiveModel {
-                    asset_id: Set(id.to_vec()),
-                    creator: Set(c.address.to_bytes().to_vec()),
-                    share: Set(c.share as i32),
-                    verified: Set(c.verified),
-                    seq: Set(0), // do we need this here @micheal-danenberg?
-                    slot_updated: Set(slot_i),
-                    position: Set(i as i16),
-                    ..Default::default()
-                });
-                creators_set.insert(c.address);
-            }
-            asset_creators::Entity::delete_many()
-                .filter(
-                    Condition::all()
-                        .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                        .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
-                )
-                .exec(&txn)
-                .await?;
-            if db_creators.len() > 0 {
-                let mut query = asset_creators::Entity::insert_many(db_creators)
-                    .on_conflict(
-                        OnConflict::columns([
-                            asset_creators::Column::AssetId,
-                            asset_creators::Column::Position,
-                        ])
-                        .update_columns([
-                            asset_creators::Column::Creator,
-                            asset_creators::Column::Share,
-                            asset_creators::Column::Verified,
-                            asset_creators::Column::Seq,
-                            asset_creators::Column::SlotUpdated,
-                        ])
-                        .to_owned(),
-                    )
-                    .build(DbBackend::Postgres);
-                query.sql = format!(
-                    "{} WHERE excluded.slot_updated > asset_creators.slot_updated",
-                    query.sql
-                );
-                txn.execute(query).await?;
-            }
-        }
+            .build(DbBackend::Postgres);
+        txn.execute(delete_query).await?;
+
+        let db_creators: Vec<asset_creators::ActiveModel> = creators
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| asset_creators::ActiveModel {
+                asset_id: Set(id.to_vec()),
+                creator: Set(c.address.to_bytes().to_vec()),
+                share: Set(c.share as i32),
+                verified: Set(c.verified),
+                seq: Set(0), // do we need this here @micheal-danenberg?
+                slot_updated: Set(slot_i),
+                position: Set(i as i16),
+                ..Default::default()
+            })
+            .collect();
+        // index new creators, technically should never conflict
+        let mut query = asset_creators::Entity::insert_many(db_creators)
+            .on_conflict(
+                OnConflict::columns([
+                    asset_creators::Column::AssetId,
+                    asset_creators::Column::Position,
+                ])
+                .update_columns([
+                    asset_creators::Column::Creator,
+                    asset_creators::Column::Share,
+                    asset_creators::Column::Verified,
+                    asset_creators::Column::Seq,
+                    asset_creators::Column::SlotUpdated,
+                ])
+                .to_owned(),
+            )
+            .build(DbBackend::Postgres);
+        query.sql = format!(
+            "{} WHERE excluded.slot_updated > asset_creators.slot_updated",
+            query.sql
+        );
+        txn.execute(query).await?;
     }
     txn.commit().await?;
     let mut task = DownloadMetadata {
