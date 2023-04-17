@@ -309,6 +309,15 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         .await?
         .is_some();
     if !creators.is_empty() && !creator_outdated {
+        // delete old creators, delete must come first to avoid unique assetId/creator and assetId/position constraint violations
+        let delete_query = asset_creators::Entity::delete_many()
+            .filter(
+                Condition::all()
+                    .add(asset_creators::Column::AssetId.eq(id.to_vec()))
+                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
+            )
+            .build(DbBackend::Postgres);
+        txn.execute(delete_query).await?;
         let db_creators: Vec<asset_creators::ActiveModel> = creators
             .into_iter()
             .enumerate()
@@ -323,7 +332,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 ..Default::default()
             })
             .collect();
-
+        // ideally should have no rows after deleting, conflict logic exists solely for safety
         let mut query = asset_creators::Entity::insert_many(db_creators)
             .on_conflict(
                 OnConflict::columns([
@@ -345,16 +354,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             query.sql
         );
         txn.execute(query).await?;
-
-        // delete old creators
-        let delete_query = asset_creators::Entity::delete_many()
-            .filter(
-                Condition::all()
-                    .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
-            )
-            .build(DbBackend::Postgres);
-        txn.execute(delete_query).await?;
     }
     txn.commit().await?;
     let mut task = DownloadMetadata {
