@@ -296,20 +296,18 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             txn.execute(query).await?;
         }
     }
-    txn.commit().await?;
 
     // checks if the creator to index is outdated. This assumes that all creator rows with same AssetId have the same SlotUpdated
-    let creator_outdated = asset_creators::Entity::find()
+    let creator_outdated = asset::Entity::find()
         .filter(
             Condition::all()
-                .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                .add(asset_creators::Column::SlotUpdated.gte(slot_i)),
+                .add(asset::Column::Id.eq(id.to_vec()))
+                .add(asset::Column::SlotUpdated.gte(slot_i)),
         )
         .one(conn)
         .await?
         .is_some();
     if !creator_outdated {
-        let txn = conn.begin().await?;
         // delete old creators, delete must come first to avoid unique assetId/creator and assetId/position constraint violations
         let delete_query = asset_creators::Entity::delete_many()
             .filter(
@@ -358,8 +356,8 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             );
             txn.execute(query).await?;
         }
-        txn.commit().await?;
     }
+    txn.commit().await?;
     let mut task = DownloadMetadata {
         asset_data_id: id.to_vec(),
         uri,
