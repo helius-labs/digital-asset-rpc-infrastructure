@@ -296,7 +296,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             txn.execute(query).await?;
         }
     }
-
     let creators = data.creators.unwrap_or_default();
 
     // checks if the creator to index is outdated. This assumes that all creator rows with same AssetId have the same SlotUpdated
@@ -309,19 +308,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         .one(conn)
         .await?
         .is_some();
-
-    // this operation completely deletes and re-inserts the creators. This is required instead of an upsert because the length of the creators array can change
     if !creators.is_empty() && !creator_outdated {
-        // delete old creators
-        let delete_query = asset_creators::Entity::delete_many()
-            .filter(
-                Condition::all()
-                    .add(asset_creators::Column::AssetId.eq(id.to_vec()))
-                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
-            )
-            .build(DbBackend::Postgres);
-        txn.execute(delete_query).await?;
-
         let db_creators: Vec<asset_creators::ActiveModel> = creators
             .into_iter()
             .enumerate()
@@ -336,7 +323,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 ..Default::default()
             })
             .collect();
-        // index new creators, technically should never conflict
+
         let mut query = asset_creators::Entity::insert_many(db_creators)
             .on_conflict(
                 OnConflict::columns([
@@ -358,6 +345,16 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             query.sql
         );
         txn.execute(query).await?;
+
+        // delete old creators
+        let delete_query = asset_creators::Entity::delete_many()
+            .filter(
+                Condition::all()
+                    .add(asset_creators::Column::AssetId.eq(id.to_vec()))
+                    .add(asset_creators::Column::SlotUpdated.lt(slot_i)),
+            )
+            .build(DbBackend::Postgres);
+        txn.execute(delete_query).await?;
     }
     txn.commit().await?;
     let mut task = DownloadMetadata {
