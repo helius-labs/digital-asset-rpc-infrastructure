@@ -297,8 +297,8 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         }
     }
 
-    // checks if the creator to index is outdated. This assumes that all creator rows with same AssetId have the same SlotUpdated
-    let creator_outdated = asset::Entity::find()
+    // check if we need to index a newer update. This assumes that all creator rows with same AssetId have the same SlotUpdated
+    let should_update_creators = asset::Entity::find()
         .filter(
             Condition::all()
                 .add(asset::Column::Id.eq(id.to_vec()))
@@ -306,9 +306,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         )
         .one(conn)
         .await?
-        .is_some();
-    if !creator_outdated {
-        // delete old creators, delete must come first to avoid unique assetId/creator and assetId/position constraint violations
+        .is_none();
+    if should_update_creators {
+        // delete all old creators for asset. Creators can be removed, and a full delete is needed to handle edge cases.
         let delete_query = asset_creators::Entity::delete_many()
             .filter(
                 Condition::all()
