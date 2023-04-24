@@ -16,6 +16,7 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
+use log::debug;
 use num_traits::FromPrimitive;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{
@@ -102,7 +103,16 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                     .filter(token_accounts::Column::SlotUpdated.max())
                     .one(conn)
                     .await?;
-                Ok((token, token_account))
+                debug!("TOKEN_ACCOUNT: {:?}", token_account);
+
+                let token_account2: Option<token_accounts::Model> = token_accounts::Entity::find()
+                    .filter(token_accounts::Column::Mint.eq(mint.clone()))
+                    .filter(token_accounts::Column::Amount.gt(0))
+                    .order_by(token_accounts::Column::SlotUpdated, Order::Desc)
+                    .one(conn)
+                    .await?;
+                debug!("TOKEN_ACCOUNT2: {:?}", token_account2);
+                Ok((token, token_account2))
             }
             _ => {
                 let token = tokens::Entity::find_by_id(mint.clone()).one(conn).await?;
