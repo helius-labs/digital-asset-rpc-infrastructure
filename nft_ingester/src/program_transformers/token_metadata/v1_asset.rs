@@ -99,6 +99,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 let token_account: Option<token_accounts::Model> = token_accounts::Entity::find()
                     .filter(token_accounts::Column::Mint.eq(mint.clone()))
                     .filter(token_accounts::Column::Amount.gt(0))
+                    .filter(token_accounts::Column::SlotUpdated.max())
                     .one(conn)
                     .await?;
                 Ok((token, token_account))
