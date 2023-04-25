@@ -3,11 +3,8 @@ use blockbuster::programs::token_account::TokenProgramAccount;
 use digital_asset_types::dao::{asset, token_accounts, tokens};
 use plerkle_serialization::AccountInfo;
 use sea_orm::{
-    entity::*,
-    query::*,
-    sea_query::{OnConflict, Token},
-    ActiveValue::Set,
-    ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait,
+    entity::*, query::*, sea_query::OnConflict, ActiveValue::Set, ConnectionTrait,
+    DatabaseConnection, DbBackend, EntityTrait,
 };
 use solana_sdk::program_option::COption;
 use spl_token::state::AccountState;
@@ -23,24 +20,6 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
     let key_bytes = key.0.to_vec();
     let spl_token_program = account_update.owner().unwrap().0.to_vec();
     match &parsing_result {
-        TokenProgramAccount::EmptyAccount => {
-            let mut query =
-                token_accounts::Entity::delete_by_id(key_bytes.clone()).build(DbBackend::Postgres);
-            query.sql = format!(
-                "{} WHERE excluded.slot_updated > tokens.slot_updated",
-                query.sql
-            );
-            let exec_result = db.execute(query).await?;
-            if exec_result.rows_affected() == 0 {
-                let mut query = tokens::Entity::delete_by_id(key_bytes).build(DbBackend::Postgres);
-                query.sql = format!(
-                    "{} WHERE excluded.slot_updated > tokens.slot_updated",
-                    query.sql
-                );
-                db.execute(query).await?;
-            }
-            Ok(())
-        }
         TokenProgramAccount::TokenAccount(ta) => {
             let mint = ta.mint.to_bytes().to_vec();
             let delegate: Option<Vec<u8>> = match ta.delegate {
