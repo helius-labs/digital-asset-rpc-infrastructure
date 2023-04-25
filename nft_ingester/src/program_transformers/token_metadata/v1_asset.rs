@@ -103,7 +103,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                     .order_by(token_accounts::Column::SlotUpdated, Order::Desc)
                     .one(conn)
                     .await?;
-                info!("TOKEN_ACCOUNT: {:?}", token_account);
                 Ok((token, token_account))
             }
             _ => {
