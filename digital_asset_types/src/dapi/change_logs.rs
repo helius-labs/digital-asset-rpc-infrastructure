@@ -1,6 +1,6 @@
+use log::debug;
 use sea_orm::sea_query::Expr;
 use sea_orm::{DatabaseConnection, DbBackend};
-use log::debug;
 use {
     crate::dao::asset,
     crate::dao::cl_items,
@@ -36,15 +36,23 @@ pub async fn get_proof_for_asset(
             vec![asset_id],
         ))
         .filter(cl_items::Column::Level.eq(0i64));
+    println!("Select Query: {:?}", sel);
+
     let leaf: Option<cl_items::Model> = sel.one(db).await?;
+
+    println!("Leaf asset {:?}", leaf);
     if leaf.is_none() {
         return Err(DbErr::RecordNotFound("Asset Proof Not Found".to_string()));
     }
     let leaf = leaf.unwrap();
     let req_indexes = get_required_nodes_for_proof(leaf.node_idx);
     let expected_proof_size = req_indexes.len();
+
+    println!("Required Indexes {:?}", req_indexes);
+    println!("Required Indexes Length {:?}", expected_proof_size);
     let mut final_node_list: Vec<SimpleChangeLog> =
         vec![SimpleChangeLog::default(); expected_proof_size];
+    println!("Final node list init {:?}", final_node_list);
     let mut query = cl_items::Entity::find()
         .select_only()
         .column(cl_items::Column::NodeIdx)
@@ -61,15 +69,24 @@ pub async fn get_proof_for_asset(
     query.sql = query
         .sql
         .replace("SELECT", "SELECT DISTINCT ON (cl_items.node_idx)");
-    let nodes: Vec<SimpleChangeLog> = db.query_all(query).await.map(|qr| {
+
+    println!("Asset Proof Query {:?}", query.sql);
+    let query_result = db.query_all(query).await;
+
+    println!("Asset Proof Query Result {:?}", query_result);
+    let nodes: Vec<SimpleChangeLog> = query_result.map(|qr| {
         qr.iter()
             .map(|q| SimpleChangeLog::from_query_result(q, "").unwrap())
             .collect()
     })?;
+
+    println!("Asset Proof Query Nodes {:?}", nodes);
     if nodes.len() != expected_proof_size {
         for node in nodes.iter() {
             if node.level < final_node_list.len().try_into().unwrap() {
                 final_node_list[node.level as usize] = node.to_owned();
+
+                println!("Final node list override {:?}", node);
             }
         }
         for (i, (n, nin)) in final_node_list.iter_mut().zip(req_indexes).enumerate() {
@@ -79,6 +96,13 @@ pub async fn get_proof_for_asset(
         }
     }
     for n in final_node_list.iter() {
+        println!(
+            "final node list iter level {} index {} seq {} hash {}",
+            n.level,
+            n.node_idx,
+            n.seq,
+            bs58::encode(&n.hash).into_string()
+        );
         debug!(
             "level {} index {} seq {} hash {}",
             n.level,
