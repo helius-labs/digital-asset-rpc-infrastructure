@@ -18,7 +18,6 @@ use sea_orm::DbErr;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use url::Url;
 
@@ -225,7 +224,7 @@ pub fn v1_content_from_json(
     if let Some(cdn_prefix) = &cdn_prefix {
         // Use default options for now.
         let cdn_options = "";
-        files.iter_mut().for_each(|mut f| match (&f.uri, &f.mime) {
+        files.iter_mut().for_each(|f| match (&f.uri, &f.mime) {
             (Some(uri), Some(mime)) => {
                 if mime.starts_with("image/") {
                     f.uri = Some(format!(
