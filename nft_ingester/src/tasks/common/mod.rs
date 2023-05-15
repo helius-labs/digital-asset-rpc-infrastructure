@@ -94,7 +94,7 @@ impl BgTask for DownloadMetadataTask {
             Ok(_) => {
                 DownloadMetadataTask::request_metadata(
                     download_metadata.uri.clone(),
-                    Duration::from_secs(30),
+                    Duration::from_secs(10),
                 )
                 .await?
             }
