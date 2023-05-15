@@ -355,4 +355,6 @@ pub struct Asset {
     pub uses: Option<Uses>,
     pub supply: Option<Supply>,
     pub mutable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
