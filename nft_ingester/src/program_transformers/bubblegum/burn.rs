@@ -21,7 +21,7 @@ where
             &[
                 "asset".as_bytes(),
                 cl.id.as_ref(),
-                leaf_index.to_le_bytes().as_ref(),
+                u32_to_u8_array(leaf_index).as_ref(),
             ],
             &mpl_bubblegum::ID,
         );
@@ -41,4 +41,12 @@ where
     Err(IngesterError::ParsingError(
         "Ix not parsed correctly".to_string(),
     ))
+}
+
+// PDA lookup requires an 8-byte array.
+fn u32_to_u8_array(value: u32) -> [u8; 8] {
+    let bytes: [u8; 4] = value.to_le_bytes();
+    let mut result: [u8; 8] = [0; 8];
+    result[..4].copy_from_slice(&bytes);
+    result
 }
