@@ -91,7 +91,6 @@ impl TaskManager {
                 task_name
             ))),
         }?;
-        warn!("Actually executing task");
 
         let start = Utc::now();
         let res = task_def.task(&db, *data_json).await;
