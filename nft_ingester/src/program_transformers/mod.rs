@@ -118,13 +118,20 @@ impl ProgramTransformer {
                 let concrete = result.result_type();
                 match concrete {
                     ProgramParseResult::Bubblegum(parsing_result) => {
-                        handle_bubblegum_instruction(
+                        let res = handle_bubblegum_instruction(
                             parsing_result,
                             &ix,
                             &self.storage,
                             &self.task_sender,
                         )
-                        .await?;
+                        .await;
+                        if let Err(e) = res {
+                            error!(
+                                "Error parsing or processing bubblegum ix within txn with signature {:?}. Error: {:?}",
+                                tx.signature(),
+                                e
+                            );
+                        }
                     }
                     _ => {
                         not_impl += 1;
