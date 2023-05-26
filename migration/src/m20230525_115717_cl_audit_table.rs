@@ -15,7 +15,6 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ClAudits::Id)
                             .big_integer()
                             .not_null()
-                            .primary_key()
                             .auto_increment(),
                     )
                     .col(ColumnDef::new(ClAudits::Tree).binary().not_null())

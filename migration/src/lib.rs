@@ -19,6 +19,7 @@ mod m20230317_121944_remove_indexes_for_perf;
 mod m20230510_183736_add_indices_to_assets;
 mod m20230516_185005_add_reindex_to_assets;
 mod m20230525_115717_cl_audit_table;
+mod m20230526_122914_cl_table_indices;
 
 pub struct Migrator;
 
@@ -45,6 +46,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230510_183736_add_indices_to_assets::Migration),
             Box::new(m20230516_185005_add_reindex_to_assets::Migration),
             Box::new(m20230525_115717_cl_audit_table::Migration),
+            Box::new(m20230526_122914_cl_table_indices::Migration),
         ]
     }
 }
