@@ -1,6 +1,6 @@
 use crate::error::IngesterError;
 use digital_asset_types::dao::{asset, asset_creators, backfill_items, cl_audits, cl_items};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ColumnTrait, DbBackend, DbErr, EntityTrait,
 };
@@ -97,7 +97,12 @@ where
                 .to_owned(),
             )
             .build(DbBackend::Postgres);
-        txn.execute(query).await?;
+        match txn.execute(query).await {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Error while inserting into cl_audits: {:?}", e);
+            }
+        }
     }
 
     // If and only if the entire path of nodes was inserted into the `cl_items` table, then insert
