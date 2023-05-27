@@ -85,23 +85,19 @@ where
             .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
 
         // Insert the audit item after the insert into cl_items have been completed
-        cl_audits::Entity::insert(audit_item)
+        let query = cl_audits::Entity::insert(audit_item)
             .on_conflict(
                 OnConflict::columns([
                     cl_audits::Column::Tree,
                     cl_audits::Column::NodeIdx,
-                    cl_audits::Column::LeafIdx,
                     cl_audits::Column::Seq,
-                    cl_audits::Column::Level,
-                    cl_audits::Column::Hash,
                     cl_audits::Column::Tx,
                 ])
                 .do_nothing()
                 .to_owned(),
             )
-            .exec(txn)
-            .await
-            .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
+            .build(DbBackend::Postgres);
+        txn.execute(query).await?;
     }
 
     // If and only if the entire path of nodes was inserted into the `cl_items` table, then insert

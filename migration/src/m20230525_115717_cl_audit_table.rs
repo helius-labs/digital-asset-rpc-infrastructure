@@ -1,4 +1,5 @@
 use sea_orm_migration::prelude::*;
+use sea_orm_migration::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -32,13 +33,36 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(ClAudits::Tx).string().not_null())
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        manager
+        .get_connection()
+        .execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "
+            ALTER TABLE cl_audits ADD CONSTRAINT unique_tree_tx_nodeidx_seq UNIQUE (tree, node_idx, seq, tx);
+            ".to_string(),
+        ))
+        .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
+            .get_connection()
+            .execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                "
+        ALTER TABLE cl_audits DROP CONSTRAINT unique_tree_tx_nodeidx_seq;
+        "
+                .to_string(),
+            ))
+            .await?;
+        manager
             .drop_table(Table::drop().table(ClAudits::Table).to_owned())
-            .await
+            .await?;
+        Ok(())
     }
 }
 
