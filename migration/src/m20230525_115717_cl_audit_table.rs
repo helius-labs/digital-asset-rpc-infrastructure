@@ -31,6 +31,7 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(ClAudits::Tx).string().not_null())
+                    .col(ColumnDef::new(ClAudits::Instruction).string().not_null())
                     .to_owned(),
             )
             .await?;
@@ -40,7 +41,7 @@ impl MigrationTrait for Migration {
         .execute(Statement::from_string(
             DatabaseBackend::Postgres,
             "
-            ALTER TABLE cl_audits ADD CONSTRAINT unique_tree_tx_nodeidx_seq UNIQUE (tree, node_idx, seq, tx);
+            ALTER TABLE cl_audits ADD CONSTRAINT unique_tree_tx_nodeidx_seq UNIQUE (tree, node_idx, seq, hash, tx);
             ".to_string(),
         ))
         .await?;
@@ -79,4 +80,5 @@ enum ClAudits {
     Hash,
     CreatedAt,
     Tx,
+    Instruction,
 }

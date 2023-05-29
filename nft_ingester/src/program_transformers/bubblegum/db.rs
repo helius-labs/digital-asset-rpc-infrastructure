@@ -13,11 +13,12 @@ pub async fn save_changelog_event<'c, T>(
     slot: u64,
     txn_id: &str,
     txn: &T,
+    instruction: &str,
 ) -> Result<u64, IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
-    insert_change_log(change_log_event, slot, txn_id, txn).await?;
+    insert_change_log(change_log_event, slot, txn_id, txn, instruction).await?;
     Ok(change_log_event.seq)
 }
 
@@ -30,6 +31,7 @@ pub async fn insert_change_log<'c, T>(
     slot: u64,
     txn_id: &str,
     txn: &T,
+    instruction: &str,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
@@ -40,12 +42,13 @@ where
     for p in change_log_event.path.iter() {
         let node_idx = p.index as i64;
         debug!(
-            "seq {}, index {} level {}, node {:?}, txn: {:?}",
+            "seq {}, index {} level {}, node {:?}, txn: {:?}, instruction: {:?}",
             change_log_event.seq,
             p.index,
             i,
             bs58::encode(p.node).into_string(),
             txn_id,
+            instruction
         );
         let leaf_idx = if i == 0 {
             Some(node_idx_to_leaf_idx(node_idx, depth as u32))
@@ -65,6 +68,7 @@ where
 
         let mut audit_item: cl_audits::ActiveModel = item.clone().into();
         audit_item.tx = Set(txn_id.to_string());
+        audit_item.instruction = Set(instruction.to_string());
 
         i += 1;
         let mut query = cl_items::Entity::insert(item)
@@ -91,6 +95,7 @@ where
                     cl_audits::Column::Tree,
                     cl_audits::Column::NodeIdx,
                     cl_audits::Column::Seq,
+                    cl_audits::Column::Hash,
                     cl_audits::Column::Tx,
                 ])
                 .do_nothing()

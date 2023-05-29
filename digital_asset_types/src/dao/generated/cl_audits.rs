@@ -24,6 +24,7 @@ pub struct Model {
     pub hash: Vec<u8>,
     pub created_at: Option<DateTime>,
     pub tx: String,
+    pub instruction: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -37,6 +38,7 @@ pub enum Column {
     Hash,
     CreatedAt,
     Tx,
+    Instruction,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DerivePrimaryKey)]
@@ -67,6 +69,7 @@ impl ColumnTrait for Column {
             Self::Hash => ColumnType::Binary.def(),
             Self::CreatedAt => ColumnType::DateTime.def(),
             Self::Tx => ColumnType::String(None).def(),
+            Self::Instruction => ColumnType::String(None).def(),
         }
     }
 }
