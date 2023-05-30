@@ -231,7 +231,8 @@ async fn main() -> anyhow::Result<()> {
             while let Some(maybe_pubkey) = pubkeys.next().await {
                 let pubkey = maybe_pubkey?;
                 info!("checking tree {pubkey}, hex: {}", hex::encode(pubkey));
-                if let Err(error) = check_tree(pubkey, &client, &conn).await {
+                // Note: Swapped check here:
+                if let Err(error) = check_tree_v2(pubkey, &client, &conn).await {
                     error!("{:?}", error);
                 }
             }
@@ -320,6 +321,8 @@ async fn check_tree(
         }
     }
 
+    info!("seq: {:?}", indexed_seq);
+
     // Check completeness
     if indexed_seq.max_seq != indexed_seq.cnt_seq {
         error!(
@@ -352,48 +355,51 @@ async fn check_tree_v2(
     client: &RpcClient,
     conn: &DatabaseConnection,
 ) -> anyhow::Result<()> {
-    let seq = get_tree_latest_seq(pubkey, client)
+    let seq: i64 = get_tree_latest_seq(pubkey, client)
         .await
         .with_context(|| format!("[{pubkey}] tree is missing from chain or error occured"))?
         .try_into()
         .unwrap();
 
-    let indexed_seq = get_tree_max_seq(pubkey, conn)
+    let indexed_seq = get_tree_max_seq_v2(pubkey, conn)
         .await
         .with_context(|| format!("[{pubkey:?}] counldn't query tree from index"))?
         .ok_or_else(|| anyhow::anyhow!("[{pubkey}] tree missing from index"))?;
 
-    // Check tip
-    match indexed_seq.max_seq.cmp(&seq) {
-        cmp::Ordering::Less => {
-            error!(
-                "[{pubkey}] tree not fully indexed: {} < {seq}",
-                indexed_seq.max_seq
-            );
-        }
-        cmp::Ordering::Equal => {}
-        cmp::Ordering::Greater => {
-            error!("[{pubkey}] indexer error: {} > {seq}", indexed_seq.max_seq);
-        }
-    }
+    info!("values: {:?}", indexed_seq);
+
+    // // Check tip
+    // match indexed_seq.max_seq.cmp(&seq) {
+    //     cmp::Ordering::Less => {
+    //         error!(
+    //             "[{pubkey}] tree not fully indexed: {} < {seq}",
+    //             indexed_seq.max_seq
+    //         );
+    //     }
+    //     cmp::Ordering::Equal => {}
+    //     cmp::Ordering::Greater => {
+    //         error!("[{pubkey}] indexer error: {} > {seq}", indexed_seq.max_seq);
+    //     }
+    // }
 
     // Check completeness
-    if indexed_seq.max_seq != indexed_seq.cnt_seq {
+    if seq != indexed_seq.cnt_seq {
         error!(
-            "[{pubkey}] tree has gaps {} != {}",
-            indexed_seq.max_seq, indexed_seq.cnt_seq
+            "[{pubkey}] Tree has gaps or is behind. Current seq: {}. Distinct seqs in cl_audits: {}.",
+            seq, indexed_seq.cnt_seq
         );
     }
 
-    if indexed_seq.max_seq == seq && indexed_seq.max_seq == indexed_seq.cnt_seq {
-        info!("[{:?}] indexing is complete, seq={:?}", pubkey, seq)
-    } else {
-        error!("[{pubkey}] indexing is failed, seq={seq} max_seq={indexed_seq:?}");
-        match get_missing_seq(pubkey, seq, conn).await {
-            Ok(seqs) => error!("[{pubkey}] missing seq: {seqs:?}"),
-            Err(error) => error!("[{pubkey}] failed to query missing seq: {error:?}"),
-        }
-    }
+    // TODO: Fix.
+    // if indexed_seq.max_seq == seq && indexed_seq.max_seq == indexed_seq.cnt_seq {
+    //     info!("[{:?}] indexing is complete, seq={:?}", pubkey, seq)
+    // } else {
+    //     error!("[{pubkey}] indexing is failed, seq={seq} max_seq={indexed_seq:?}");
+    //     match get_missing_seq(pubkey, seq, conn).await {
+    //         Ok(seqs) => error!("[{pubkey}] missing seq: {seqs:?}"),
+    //         Err(error) => error!("[{pubkey}] failed to query missing seq: {error:?}"),
+    //     }
+    // }
 
     Ok(())
 }
@@ -426,12 +432,29 @@ async fn get_tree_max_seq(
     tree: Pubkey,
     conn: &DatabaseConnection,
 ) -> Result<Option<MaxSeqItem>, DbErr> {
-    let query = cl_audits::Entity::find()
+    let query = cl_items::Entity::find()
         .select_only()
         .filter(cl_items::Column::Tree.eq(tree.as_ref()))
         .column_as(Expr::col(cl_items::Column::Seq).max(), "max_seq")
         .column_as(Expr::cust("count(distinct seq)"), "cnt_seq")
         .build(DbBackend::Postgres);
+
+    MaxSeqItem::find_by_statement(query).one(conn).await
+}
+
+// TODO: Make this less ugly since max_seq is not used.
+async fn get_tree_max_seq_v2(
+    tree: Pubkey,
+    conn: &DatabaseConnection,
+) -> Result<Option<MaxSeqItem>, DbErr> {
+    let query = cl_audits::Entity::find()
+        .select_only()
+        .filter(cl_audits::Column::Tree.eq(tree.as_ref()))
+        .column_as(Expr::col(cl_audits::Column::Seq).max(), "max_seq")
+        .column_as(Expr::cust("count(distinct seq)"), "cnt_seq")
+        .build(DbBackend::Postgres);
+
+    info!("sql: {}", query.sql);
 
     MaxSeqItem::find_by_statement(query).one(conn).await
 }
