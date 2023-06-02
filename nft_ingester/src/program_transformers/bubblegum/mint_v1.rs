@@ -20,6 +20,7 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
+use log::error;
 use num_traits::FromPrimitive;
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ConnectionTrait, DbBackend, EntityTrait, JsonValue,
@@ -85,6 +86,7 @@ where
                         "URI is empty".to_string(),
                     ));
                 }
+                error!("Chain data: json:{:?}", chain_data_json);
                 let data = asset_data::ActiveModel {
                     id: Set(id_bytes.to_vec()),
                     chain_data_mutability: Set(chain_mutability),
@@ -122,6 +124,7 @@ where
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
+                error!("args are: {:?}", args);
                 let data_hash = hash_metadata(args)
                     .map(|e| bs58::encode(e).into_string())
                     .unwrap_or("".to_string())

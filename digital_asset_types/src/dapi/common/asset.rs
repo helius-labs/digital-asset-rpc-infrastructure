@@ -8,8 +8,16 @@ use crate::rpc::response::{AssetError, AssetList};
 use crate::rpc::transform::AssetTransform;
 use crate::rpc::{
     Asset as RpcAsset, Authority, Compression, Content, Creator, File, Group, Interface,
-    MetadataMap, Ownership, Royalty, Scope, Supply, Uses,
+    MetadataMap, Ownership, Royalty, Scope, Supply, UseMethod, Uses,
 };
+use blockbuster::token_metadata::assertions::metadata;
+use log::error;
+use mpl_bubblegum::hash_metadata;
+use mpl_bubblegum::state::metaplex_adapter::{
+    Collection as MetaCollection, Creator as MetaCreator, MetadataArgs, TokenProgramVersion,
+    TokenStandard, UseMethod as MetaUseMethod, Uses as MetaUse,
+};
+use solana_sdk::pubkey::Pubkey;
 
 use jsonpath_lib::JsonPathError;
 use mime_guess::Mime;
@@ -19,6 +27,7 @@ use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 use url::Url;
 
 use log::warn;
@@ -162,6 +171,7 @@ pub fn v1_content_from_json(
         links.insert("external_url".to_string(), val[0].to_owned());
         links
     });
+
     let _metadata = safe_select(selector, "description");
     let mut actual_files: HashMap<String, File> = HashMap::new();
     if let Some(files) = selector("$.properties.files[*]")
@@ -317,7 +327,6 @@ pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcA
     let rpc_creators = to_creators(creators);
     let rpc_groups = to_grouping(groups);
     let interface = get_interface(&asset);
-    let content = get_content(&asset, &data, transform.cdn_prefix.clone())?;
     let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
     let chain_data_selector = &mut chain_data_selector_fn;
     let basis_points = safe_select(chain_data_selector, "$.primary_sale_happened")
@@ -325,7 +334,29 @@ pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcA
         .unwrap_or(false);
     let edition_nonce =
         safe_select(chain_data_selector, "$.edition_nonce").and_then(|v| v.as_u64());
-    Ok(RpcAsset {
+    let uses = data.chain_data.get("uses").map(|u| Uses {
+        use_method: u
+            .get("use_method")
+            .and_then(|s| s.as_str())
+            .unwrap_or("Single")
+            .to_string()
+            .into(),
+        total: u.get("total").and_then(|t| t.as_u64()).unwrap_or(0),
+        remaining: u.get("remaining").and_then(|t| t.as_u64()).unwrap_or(0),
+    });
+
+    let (modified_name, modified_symbol) = check_and_recompute_hashes(
+        uses.clone(),
+        data.clone(),
+        rpc_creators.clone(),
+        asset.data_hash.clone(),
+        rpc_groups.clone(),
+        &edition_nonce,
+        asset.royalty_amount.clone(),
+    );
+    let content = get_content(&asset, &data, transform.cdn_prefix.clone())?;
+
+    let res = RpcAsset {
         interface: interface.clone(),
         id: bs58::encode(asset.id).into_string(),
         content: Some(content),
@@ -381,17 +412,130 @@ pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcA
             }),
             _ => None,
         },
-        uses: data.chain_data.get("uses").map(|u| Uses {
-            use_method: u
-                .get("use_method")
-                .and_then(|s| s.as_str())
-                .unwrap_or("Single")
-                .to_string()
-                .into(),
-            total: u.get("total").and_then(|t| t.as_u64()).unwrap_or(0),
-            remaining: u.get("remaining").and_then(|t| t.as_u64()).unwrap_or(0),
+        uses: uses.clone(),
+    };
+
+    Ok(res)
+}
+
+fn check_and_recompute_hashes(
+    uses: Option<Uses>,
+    data: asset_data::Model,
+    creator: Vec<Creator>,
+    metahash: Option<String>,
+    metagroups: Vec<Group>,
+    edition_nonce: &Option<u64>,
+    royalty_amount: i32,
+) -> Option<(String, String)> {
+    fn convert_use_method(rpc_use_method: UseMethod) -> MetaUseMethod {
+        match rpc_use_method {
+            UseMethod::Burn => MetaUseMethod::Burn,
+            UseMethod::Multiple => MetaUseMethod::Multiple,
+            UseMethod::Single => MetaUseMethod::Single,
+        }
+    }
+
+    fn to_metadata_creators(creators: Vec<Creator>) -> Vec<MetaCreator> {
+        creators
+            .into_iter()
+            .map(|a| MetaCreator {
+                address: Pubkey::from_str(&a.address.as_str()).unwrap(),
+                share: a.share as u8,
+                verified: a.verified,
+            })
+            .collect()
+    }
+
+    fn hash_and_encode(args: &MetadataArgs) -> String {
+        hash_metadata(args)
+            .map(|e| bs58::encode(e).into_string())
+            .unwrap_or("".to_string())
+            .trim()
+            .to_string()
+    }
+
+    fn compute_hash(mut args: MetadataArgs, stored_hash: String) -> Option<(String, String)> {
+        let attempts = vec![
+            |s: &mut String| s.insert_str(0, " "),
+            |s: &mut String| s.push(' '),
+            |s: &mut String| s.push('\0'),
+        ];
+
+        let mut data_hash = hash_and_encode(&args);
+
+        for attempt in &attempts {
+            if data_hash != stored_hash {
+                (attempt)(&mut args.name);
+                data_hash = hash_and_encode(&args);
+            } else {
+                println!("matched hash by changing name");
+                return Some((args.name.clone(), args.symbol.clone()));
+            }
+        }
+
+        for attempt in &attempts {
+            if data_hash != stored_hash {
+                (attempt)(&mut args.symbol);
+                data_hash = hash_and_encode(&args);
+            } else {
+                println!("matched hash by changing symbol");
+                return Some((args.name.clone(), args.symbol.clone()));
+            }
+        }
+
+        println!(
+            "mismatched hash, expected: {:?}, got: {:?}",
+            stored_hash, data_hash
+        );
+        None
+    }
+
+    let uses = uses.map(|rpc_uses| MetaUse {
+        use_method: convert_use_method(rpc_uses.use_method),
+        remaining: rpc_uses.remaining,
+        total: rpc_uses.total,
+    });
+    let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
+    let chain_data_selector = &mut chain_data_selector_fn;
+    let name = safe_select(chain_data_selector, "$.name")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let symbol = safe_select(chain_data_selector, "$.symbol")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    let primary_sale_happened = safe_select(chain_data_selector, "$.primary_sale_happened")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let coll = metagroups.iter().find(|g| g.group_key == "collection");
+    let collection = match coll {
+        Some(c) => Some(MetaCollection {
+            key: Pubkey::from_str(&c.group_value).unwrap(),
+            verified: true,
         }),
-    })
+        None => None,
+    };
+
+    let args = MetadataArgs {
+        name: name,
+        symbol: symbol,
+        uri: data.metadata_url.clone(),
+        primary_sale_happened: primary_sale_happened,
+        is_mutable: data.chain_data_mutability.into(),
+        edition_nonce: edition_nonce.map(|v| v as u8),
+        token_standard: Some(TokenStandard::NonFungible),
+        collection: collection,
+        uses: uses,
+        token_program_version: TokenProgramVersion::Original,
+        creators: to_metadata_creators(creator),
+        seller_fee_basis_points: royalty_amount as u16,
+    };
+    let stored_hash = metahash.map(|e| e.trim().to_string()).unwrap_or_default();
+    println!("data args: {:?}", args);
+    compute_hash(args, stored_hash)
 }
 
 pub fn asset_list_to_rpc(
