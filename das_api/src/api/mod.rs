@@ -39,6 +39,14 @@ pub struct GetAssetsByOwner {
 pub struct GetAsset {
     pub id: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GetAssetById {
+    pub id: Option<String>,
+    pub original: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 
@@ -115,7 +123,7 @@ pub trait ApiContract: Send + Sync + 'static {
         params = "named",
         summary = "Get an asset by its ID"
     )]
-    async fn get_asset(&self, payload: GetAsset) -> Result<Asset, DasApiError>;
+    async fn get_asset(&self, payload: GetAssetById) -> Result<Asset, DasApiError>;
     #[rpc(
         name = "getAssetsByOwner",
         params = "named",

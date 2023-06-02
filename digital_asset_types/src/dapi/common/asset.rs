@@ -61,7 +61,7 @@ pub fn build_asset_response(
         }
         Pagination::Page { page } => (Some(*page), None, None),
     };
-    let (items, errors) = asset_list_to_rpc(assets, transform);
+    let (items, errors) = asset_list_to_rpc(assets, transform, false);
     AssetList {
         total,
         limit: limit as u32,
@@ -127,9 +127,17 @@ pub fn safe_select<'a>(
         .and_then(|v| v.pop())
 }
 
+fn sanitize(val: Value) -> Result<String, &'static str> {
+    match val {
+        Value::String(s) => Ok(s.trim().replace("\0", "").to_string()),
+        _ => Err("Provided value is not a string"),
+    }
+}
+
 pub fn v1_content_from_json(
     asset_data: &asset_data::Model,
     cdn_prefix: Option<String>,
+    original: bool,
 ) -> Result<Content, DbErr> {
     // todo -> move this to the bg worker for pre processing
     let json_uri = asset_data.metadata_url.clone();
@@ -141,7 +149,15 @@ pub fn v1_content_from_json(
     let mut meta: MetadataMap = MetadataMap::new();
     let name = safe_select(chain_data_selector, "$.name");
     if let Some(name) = name {
-        meta.set_item("name", name.clone());
+        if !original {
+            if let Ok(name) = sanitize(name.clone()) {
+                meta.set_item("name", Value::String(name));
+            } else {
+                meta.set_item("name", name.clone());
+            }
+        } else {
+            meta.set_item("name", name.clone());
+        }
     }
     let desc = safe_select(selector, "$.description");
     if let Some(desc) = desc {
@@ -149,7 +165,15 @@ pub fn v1_content_from_json(
     }
     let symbol = safe_select(chain_data_selector, "$.symbol");
     if let Some(symbol) = symbol {
-        meta.set_item("symbol", symbol.clone());
+        if !original {
+            if let Ok(symbol) = sanitize(symbol.clone()) {
+                meta.set_item("symbol", Value::String(symbol));
+            } else {
+                meta.set_item("symbol", symbol.clone());
+            }
+        } else {
+            meta.set_item("symbol", symbol.clone());
+        }
     }
     let symbol = safe_select(selector, "$.attributes");
     if let Some(symbol) = symbol {
@@ -258,10 +282,11 @@ pub fn get_content(
     asset: &asset::Model,
     data: &asset_data::Model,
     cdn_prefix: Option<String>,
+    original: bool,
 ) -> Result<Content, DbErr> {
     match asset.specification_version {
-        SpecificationVersions::V1 => v1_content_from_json(data, cdn_prefix),
-        SpecificationVersions::V0 => v1_content_from_json(data, cdn_prefix),
+        SpecificationVersions::V1 => v1_content_from_json(data, cdn_prefix, original),
+        SpecificationVersions::V0 => v1_content_from_json(data, cdn_prefix, original),
         _ => Err(DbErr::Custom("Version Not Implemented".to_string())),
     }
 }
@@ -305,7 +330,11 @@ pub fn get_interface(asset: &asset::Model) -> Interface {
 }
 
 //TODO -> impl custom erro type
-pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcAsset, DbErr> {
+pub fn asset_to_rpc(
+    asset: FullAsset,
+    transform: &AssetTransform,
+    original: bool,
+) -> Result<RpcAsset, DbErr> {
     let FullAsset {
         asset,
         data,
@@ -317,7 +346,7 @@ pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcA
     let rpc_creators = to_creators(creators);
     let rpc_groups = to_grouping(groups);
     let interface = get_interface(&asset);
-    let content = get_content(&asset, &data, transform.cdn_prefix.clone())?;
+    let content = get_content(&asset, &data, transform.cdn_prefix.clone(), original)?;
     let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
     let chain_data_selector = &mut chain_data_selector_fn;
     let basis_points = safe_select(chain_data_selector, "$.primary_sale_happened")
@@ -397,12 +426,13 @@ pub fn asset_to_rpc(asset: FullAsset, transform: &AssetTransform) -> Result<RpcA
 pub fn asset_list_to_rpc(
     asset_list: Vec<FullAsset>,
     transform: &AssetTransform,
+    original: bool,
 ) -> (Vec<RpcAsset>, Vec<AssetError>) {
     asset_list
         .into_iter()
         .fold((vec![], vec![]), |(mut assets, mut errors), asset| {
             let id = bs58::encode(asset.asset.id.clone()).into_string();
-            match asset_to_rpc(asset, transform) {
+            match asset_to_rpc(asset, transform, original) {
                 Ok(rpc_asset) => assets.push(rpc_asset),
                 Err(e) => errors.push(AssetError {
                     id,

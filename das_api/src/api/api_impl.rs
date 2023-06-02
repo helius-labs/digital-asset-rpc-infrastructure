@@ -1,5 +1,3 @@
-
-
 use digital_asset_types::{
     dao::{
         scopes::asset::get_grouping,
@@ -20,6 +18,7 @@ use sea_orm::{sea_query::ConditionType, ConnectionTrait, DbBackend, Statement};
 
 use crate::validation::validate_opt_pubkey;
 use open_rpc_schema::document::OpenrpcDocument;
+use solana_sdk::pubkey::Pubkey;
 use {
     crate::api::*,
     crate::config::Config,
@@ -122,13 +121,20 @@ impl ApiContract for DasApi {
             .map_err(Into::into)
     }
 
-    async fn get_asset(self: &DasApi, payload: GetAsset) -> Result<Asset, DasApiError> {
-        let id = validate_pubkey(payload.id.clone())?;
-        let id_bytes = id.to_bytes().to_vec();
+    async fn get_asset(self: &DasApi, payload: GetAssetById) -> Result<Asset, DasApiError> {
+        let GetAssetById { id, original } = payload;
+        let id_pub: Pubkey;
+        if let Some(id) = id.clone() {
+            id_pub = validate_pubkey(id)?;
+        } else {
+            return Err(DasApiError::MissingAssetError);
+        }
+        let original_name = original.unwrap_or(false);
+        let id_bytes = id_pub.to_bytes().to_vec();
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
         };
-        get_asset(&self.db_connection, id_bytes, &transform)
+        get_asset(&self.db_connection, id_bytes, &transform, original_name)
             .await
             .map_err(Into::into)
     }

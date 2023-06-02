@@ -2,6 +2,8 @@ use {jsonrpsee::core::Error as RpcError, jsonrpsee::types::error::CallError, thi
 
 #[derive(Error, Debug)]
 pub enum DasApiError {
+    #[error("Missing Asset Id")]
+    MissingAssetError,
     #[error("Config Missing or Error {0}")]
     ConfigurationError(String),
     #[error("Server Failed to Start")]

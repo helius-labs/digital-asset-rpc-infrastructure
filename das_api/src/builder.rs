@@ -21,7 +21,7 @@ impl RpcApiBuilder {
         module.register_alias("getAssetProof", "get_asset_proof")?;
 
         module.register_async_method("get_asset", |rpc_params, rpc_context| async move {
-            let payload = rpc_params.parse::<GetAsset>()?;
+            let payload = rpc_params.parse::<GetAssetById>()?;
             rpc_context.get_asset(payload).await.map_err(Into::into)
         })?;
         module.register_alias("getAsset", "get_asset")?;
