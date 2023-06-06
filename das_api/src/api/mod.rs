@@ -102,7 +102,7 @@ pub struct GetGrouping {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct GetTransactions {
+pub struct GetTransactionsByAsset {
     pub id: String,
     pub limit: Option<u32>,
     pub page: Option<u32>,
@@ -179,8 +179,8 @@ pub trait ApiContract: Send + Sync + 'static {
         params = "named",
         summary = "Get all the transactions for an asset"
     )]
-    async fn get_transactions(
+    async fn get_transactions_by_asset(
         &self,
-        payload: GetTransactions,
+        payload: GetTransactionsByAsset,
     ) -> Result<TransactionList, DasApiError>;
 }

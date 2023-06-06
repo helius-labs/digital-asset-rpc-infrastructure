@@ -72,13 +72,16 @@ impl RpcApiBuilder {
             },
         )?;
 
-        module.register_async_method("getTransactions", |rpc_params, rpc_context| async move {
-            let payload = rpc_params.parse::<GetTransactions>()?;
-            rpc_context
-                .get_transactions(payload)
-                .await
-                .map_err(Into::into)
-        })?;
+        module.register_async_method(
+            "getTransactionsByAsset",
+            |rpc_params, rpc_context| async move {
+                let payload = rpc_params.parse::<GetTransactionsByAsset>()?;
+                rpc_context
+                    .get_transactions_by_asset(payload)
+                    .await
+                    .map_err(Into::into)
+            },
+        )?;
 
         module.register_alias("getAssetsByGroup", "get_assets_by_group")?;
 

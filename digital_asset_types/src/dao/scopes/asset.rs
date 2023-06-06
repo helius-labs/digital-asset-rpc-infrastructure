@@ -312,7 +312,7 @@ pub async fn fetch_transactions(
     Ok(transaction_list)
 }
 
-pub async fn get_transactions(
+pub async fn get_transactions_by_asset(
     conn: &impl ConnectionTrait,
     asset_id: Vec<u8>,
     pagination: &Pagination,
