@@ -13,6 +13,7 @@ use digital_asset_types::{
     rpc::{filter::SearchConditionType, response::GetGroupingResponse, transform::AssetTransform},
     rpc::{OwnershipModel, RoyaltyModel},
 };
+use log::info;
 use open_rpc_derive::document_rpc;
 use sea_orm::{sea_query::ConditionType, ConnectionTrait, DbBackend, Statement};
 
@@ -111,6 +112,7 @@ impl ApiContract for DasApi {
     async fn get_asset_proof(self: &DasApi, payload: GetAsset) -> Result<AssetProof, DasApiError> {
         let id = validate_pubkey(payload.id.clone())?;
         let id_bytes = id.to_bytes().to_vec();
+        info!("get_asset_proof for id {:?}", id);
         get_proof_for_asset(&self.db_connection, id_bytes)
             .await
             .and_then(|p| {
