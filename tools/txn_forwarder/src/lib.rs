@@ -204,6 +204,7 @@ async fn send(
     // Ignore if tx failed or meta is missed
     let meta = tx.transaction.meta.as_ref();
     if meta.map(|meta| meta.status.is_err()).unwrap_or(true) {
+        info!("Dropping failed transaction: {:?}", signature);
         return Ok(());
     }
 
