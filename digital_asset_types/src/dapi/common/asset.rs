@@ -284,9 +284,9 @@ pub fn get_content(
     cdn_prefix: Option<String>,
 ) -> Result<Content, DbErr> {
     match asset.specification_version {
-        // TODO: Add support for other versions.
-        SpecificationVersions::V1 => v1_content_from_json(data, cdn_prefix),
-        SpecificationVersions::V0 => v1_content_from_json(data, cdn_prefix),
+        SpecificationVersions::V1 | SpecificationVersions::V0 => {
+            v1_content_from_json(data, cdn_prefix)
+        }
         _ => Err(DbErr::Custom("Version Not Implemented".to_string())),
     }
 }
