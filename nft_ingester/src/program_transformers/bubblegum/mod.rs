@@ -3,7 +3,7 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, InstructionName},
 };
-use log::{debug, info};
+use log::{debug, error, info};
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -66,9 +66,14 @@ where
             delegate::delegate(parsing_result, bundle, txn, ix_str).await?;
         }
         InstructionName::MintV1 | InstructionName::MintToCollectionV1 => {
-            let task = mint_v1::mint_v1(parsing_result, bundle, txn, ix_str).await?;
+            let result = mint_v1::update_name_symbol(&parsing_result, bundle, txn).await;
 
-            task_manager.send(task)?;
+            match result {
+                Ok(_) => info!("Successfully updated name and symbol"),
+                Err(e) => {
+                    error!("Error updating name and symbol: {:?}", e);
+                }
+            }
         }
         InstructionName::Redeem => {
             redeem::redeem(parsing_result, bundle, txn, ix_str).await?;
