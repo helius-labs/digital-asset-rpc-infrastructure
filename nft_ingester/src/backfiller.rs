@@ -29,7 +29,6 @@ use solana_sdk::{
     signature::Signature,
     slot_history::Slot,
 };
-use solana_sdk_macro::pubkey;
 use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedConfirmedBlock,
     EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding,
@@ -66,9 +65,6 @@ const MAX_FAILURE_DELAY_MS: u64 = 10_000;
 const BLOCK_CACHE_SIZE: usize = 300_000;
 const MAX_CACHE_COST: i64 = 32;
 const BLOCK_CACHE_DURATION: u64 = 172800;
-// Account key used to determine if transaction is a simple vote.
-const VOTE: &str = "Vote111111111111111111111111111111111111111";
-pub const BUBBLEGUM_SIGNER: Pubkey = pubkey!("4ewWZC5gT6TGpm5LZNDs9wVonfUT2q5PP5sc9kVbwMAK");
 
 struct SlotSeq(u64, u64);
 /// Main public entry point for backfiller task.
