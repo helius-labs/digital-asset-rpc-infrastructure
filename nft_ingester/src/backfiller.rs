@@ -37,7 +37,7 @@ use solana_transaction_status::{
 use spl_account_compression::state::{
     merkle_tree_get_size, ConcurrentMerkleTreeHeader, CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1,
 };
-use sqlx::{self, postgres::PgListener, Pool, Postgres};
+use sqlx::{self, Pool, Postgres};
 use std::{
     cmp,
     collections::{HashMap, HashSet},
@@ -206,7 +206,7 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
 
         // Get database listener channel.
-        let channel = config
+        let _channel = config
             .database_config
             .get(DATABASE_LISTENER_CHANNEL_KEY)
             .and_then(|u| u.clone().into_string())
@@ -722,8 +722,8 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
 
             let merkle_tree_size = merkle_tree_get_size(&header)
                 .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;
-            let (tree_bytes, canopy_bytes) = rest.split_at_mut(merkle_tree_size);
-            let seq_bytes = tree_bytes[0..8].try_into().map_err(|e| {
+            let (tree_bytes, _canopy_bytes) = rest.split_at_mut(merkle_tree_size);
+            let seq_bytes = tree_bytes[0..8].try_into().map_err(|_e| {
                 IngesterError::RpcGetDataError("Failed to convert seq bytes to array".to_string())
             })?;
             let seq = u64::from_le_bytes(seq_bytes);
