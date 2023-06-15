@@ -40,8 +40,19 @@ impl RpcApiBuilder {
                     payload = parsed_payload;
                 } else {
                     let mut sequence_parser = rpc_params.sequence();
+
+                    let owner_address = match sequence_parser.next::<String>() {
+                        Ok(address) => address,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'owner_address' is missing or invalid".to_string(),
+                            )
+                            .into())
+                        }
+                    };
+
                     payload = GetAssetsByOwner {
-                        owner_address: sequence_parser.next::<String>().unwrap_or("".to_string()),
+                        owner_address,
                         sort_by: sequence_parser
                             .optional_next::<AssetSorting>()
                             .unwrap_or(None),
@@ -67,8 +78,19 @@ impl RpcApiBuilder {
                     payload = parsed_payload
                 } else {
                     let mut sequence_parser = rpc_params.sequence();
+
+                    let creator_address = match sequence_parser.next::<String>() {
+                        Ok(address) => address,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'creator_address' is missing or invalid".to_string(),
+                            )
+                            .into());
+                        }
+                    };
+
                     payload = GetAssetsByCreator {
-                        creator_address: sequence_parser.next::<String>().unwrap_or("".to_string()),
+                        creator_address,
                         only_verified: sequence_parser.optional_next::<bool>().unwrap_or(None),
                         sort_by: sequence_parser
                             .optional_next::<AssetSorting>()
@@ -95,10 +117,19 @@ impl RpcApiBuilder {
                     payload = parsed_payload;
                 } else {
                     let mut sequence_parser = rpc_params.sequence();
+
+                    let authority_address = match sequence_parser.next::<String>() {
+                        Ok(address) => address,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'authority_address' is missing or invalid".to_string(),
+                            )
+                            .into());
+                        }
+                    };
+
                     payload = GetAssetsByAuthority {
-                        authority_address: sequence_parser
-                            .next::<String>()
-                            .unwrap_or("".to_string()),
+                        authority_address,
                         sort_by: sequence_parser
                             .optional_next::<AssetSorting>()
                             .unwrap_or(None),
@@ -123,9 +154,30 @@ impl RpcApiBuilder {
                     payload = parsed_payload;
                 } else {
                     let mut sequence_parser = rpc_params.sequence();
+
+                    let group_key = match sequence_parser.next::<String>() {
+                        Ok(key) => key,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'group_key' is missing or invalid".to_string(),
+                            )
+                            .into());
+                        }
+                    };
+
+                    let group_value = match sequence_parser.next::<String>() {
+                        Ok(value) => value,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'group_value' is missing or invalid".to_string(),
+                            )
+                            .into());
+                        }
+                    };
+
                     payload = GetAssetsByGroup {
-                        group_key: sequence_parser.next::<String>().unwrap_or("".to_string()),
-                        group_value: sequence_parser.next::<String>().unwrap_or("".to_string()),
+                        group_key,
+                        group_value,
                         sort_by: sequence_parser
                             .optional_next::<AssetSorting>()
                             .unwrap_or(None),
@@ -150,8 +202,19 @@ impl RpcApiBuilder {
                     payload = parsed_payload;
                 } else {
                     let mut sequence_parser = rpc_params.sequence();
+
+                    let id = match sequence_parser.next::<String>() {
+                        Ok(id) => id,
+                        Err(_) => {
+                            return Err(DasApiError::ValidationError(
+                                "'id' is missing or invalid".to_string(),
+                            )
+                            .into());
+                        }
+                    };
+
                     payload = GetSignaturesForAsset {
-                        id: sequence_parser.next::<String>().unwrap_or("".to_string()),
+                        id,
                         limit: sequence_parser.optional_next::<u32>().unwrap_or(None),
                         page: sequence_parser.optional_next::<u32>().unwrap_or(None),
                         before: sequence_parser.optional_next::<String>().unwrap_or(None),
