@@ -3,6 +3,7 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
+use log::warn;
 
 use digital_asset_types::dao::asset_data;
 
@@ -37,6 +38,7 @@ where
                 let query = asset_data::Entity::update(data)
                     .filter(Condition::all().add(asset_data::Column::Id.eq(id_bytes.clone())))
                     .build(DbBackend::Postgres);
+                warn!("log: {:?}", query.to_string());
                 txn.execute(query)
                     .await
                     .map(|_| ())
