@@ -118,8 +118,18 @@ async fn main() -> anyhow::Result<()> {
         Action::Scenario { scenario_file } => {
             let mut accounts = read_lines(&scenario_file).await?;
             while let Some(maybe_account) = accounts.next().await {
-                let pubkey = maybe_account?.parse()?;
-                fetch_and_send_account(pubkey, &client, &messenger).await?;
+                let mint = maybe_account?.parse()?;
+                let metadata_account = find_metadata_account(&mint).0;
+                let token_account = get_token_largest_account(&client, mint).await;
+
+                match token_account {
+                    Ok(token_account) => {
+                        for pubkey in &[mint, metadata_account, token_account] {
+                            fetch_and_send_account(*pubkey, &client, &messenger).await?;
+                        }
+                    }
+                    Err(e) => warn!("Failed to find mint account: {:?}", e),
+                }
             }
         }
         Action::Mint { mint } => {
