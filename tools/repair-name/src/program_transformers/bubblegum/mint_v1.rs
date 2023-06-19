@@ -1,23 +1,12 @@
-
 use crate::error::IngesterError;
 use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
 
-use digital_asset_types::{
-    dao::{
-        asset_data,
-    },
-};
+use digital_asset_types::dao::asset_data;
 
-use sea_orm::{
-    entity::*, query::*, ConnectionTrait, DbBackend, EntityTrait,
-};
-
-
-
-
+use sea_orm::{entity::*, query::*, ConnectionTrait, DbBackend, EntityTrait};
 
 pub async fn update_name_symbol<'c, T>(
     parsing_result: &BubblegumInstruction,
