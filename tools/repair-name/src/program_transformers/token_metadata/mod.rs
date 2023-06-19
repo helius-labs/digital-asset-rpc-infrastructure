@@ -1,16 +1,9 @@
-mod master_edition;
 mod v1_asset;
 
-use crate::{
-    error::IngesterError,
-    program_transformers::token_metadata::{
-        v1_asset::save_v1_asset,
-    },
-};
+use crate::{error::IngesterError, program_transformers::token_metadata::v1_asset::save_v1_asset};
 use blockbuster::programs::token_metadata::{TokenMetadataAccountData, TokenMetadataAccountState};
 use plerkle_serialization::AccountInfo;
-use sea_orm::{DatabaseConnection};
-
+use sea_orm::DatabaseConnection;
 
 pub async fn handle_token_metadata_account<'a, 'b, 'c>(
     account_update: &'a AccountInfo<'a>,

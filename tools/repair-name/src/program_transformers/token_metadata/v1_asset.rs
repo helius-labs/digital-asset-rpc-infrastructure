@@ -1,7 +1,8 @@
 use crate::error::IngesterError;
-use blockbuster::token_metadata::{state::Metadata};
-use digital_asset_types::dao::{asset_data};
+use blockbuster::token_metadata::state::Metadata;
+use digital_asset_types::dao::asset_data;
 
+use log::debug;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{entity::*, query::*, ActiveValue::Set, ConnectionTrait};
 
@@ -24,6 +25,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         raw_symbol: Set(Some(symbol.to_vec())),
         ..Default::default()
     };
+    debug!("Saving v1 asset");
     Ok(())
 
     /*
