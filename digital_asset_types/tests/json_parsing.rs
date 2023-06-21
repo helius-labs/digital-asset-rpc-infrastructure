@@ -17,7 +17,7 @@ pub async fn load_test_json(file_name: &str) -> serde_json::Value {
     serde_json::from_str(&json).unwrap()
 }
 
-pub async fn parse_offchain_json(
+pub async fn parse_onchain_json(
     json: serde_json::Value,
     cdn_prefix: Option<String>,
     raw_data: Option<bool>,
@@ -50,7 +50,7 @@ pub async fn parse_offchain_json(
 async fn simple_content() {
     let cdn_prefix = None;
     let j = load_test_json("mad_lad.json").await;
-    let mut parsed = parse_offchain_json(j.clone(), cdn_prefix.clone(), Some(true)).await;
+    let mut parsed = parse_onchain_json(j.clone(), cdn_prefix.clone(), Some(true)).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -84,7 +84,7 @@ async fn simple_content() {
         _ => panic!("symbol key not found or not a string"),
     }
 
-    parsed = parse_offchain_json(j.clone(), cdn_prefix.clone(), Some(false)).await;
+    parsed = parse_onchain_json(j.clone(), cdn_prefix.clone(), Some(false)).await;
 
     match parsed.metadata.get_item("name") {
         Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf"),
@@ -96,7 +96,7 @@ async fn simple_content() {
         _ => panic!("symbol key not found or not a string"),
     }
 
-    parsed = parse_offchain_json(j, cdn_prefix, None).await;
+    parsed = parse_onchain_json(j, cdn_prefix, None).await;
 
     match parsed.metadata.get_item("name") {
         Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf"),
@@ -113,7 +113,7 @@ async fn simple_content() {
 async fn simple_content_with_cdn() {
     let cdn_prefix = Some("https://cdn.foobar.blah".to_string());
     let j = load_test_json("mad_lad.json").await;
-    let parsed = parse_offchain_json(j, cdn_prefix, None).await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -142,7 +142,7 @@ async fn simple_content_with_cdn() {
 async fn complex_content() {
     let cdn_prefix = None;
     let j = load_test_json("infinite_fungi.json").await;
-    let parsed = parse_offchain_json(j, cdn_prefix, None).await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -174,7 +174,7 @@ async fn complex_content() {
 async fn complex_content_with_cdn() {
     let cdn_prefix = Some("https://cdn.foobar.blah".to_string());
     let j = load_test_json("infinite_fungi.json").await;
-    let parsed = parse_offchain_json(j, cdn_prefix, None).await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
     assert_eq!(
         parsed.files,
         Some(vec![
