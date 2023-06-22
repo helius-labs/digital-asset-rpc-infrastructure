@@ -2,8 +2,9 @@ use crate::dao::{
     asset, asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
     GroupingSize, Pagination,
 };
+use indexmap::IndexMap;
 use sea_orm::{entity::*, query::*, ConnectionTrait, DbErr, Order};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub fn paginate<'db, T>(pagination: &Pagination, limit: u64, stmt: T) -> T
 where
@@ -182,8 +183,8 @@ pub async fn get_related_for_assets(
         acc
     });
 
-    // Using BTreeMap to preserve order.
-    let mut assets_map = assets.into_iter().fold(BTreeMap::new(), |mut acc, asset| {
+    // Using IndexMap to preserve order.
+    let mut assets_map = assets.into_iter().fold(IndexMap::new(), |mut acc, asset| {
         if let Some(ad) = asset
             .asset_data
             .clone()
