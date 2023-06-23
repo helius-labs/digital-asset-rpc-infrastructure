@@ -53,12 +53,12 @@ impl DasApi {
     fn validate_pagination(
         &self,
         limit: &Option<u32>,
-        page: &Option<u32>,
+        page: &mut Option<u32>,
         before: &Option<String>,
         after: &Option<String>,
     ) -> Result<(), DasApiError> {
         if page.is_none() && before.is_none() && after.is_none() {
-            return Err(DasApiError::PaginationEmptyError);
+            *page = Some(1);
         }
 
         if let Some(limit) = limit {
@@ -141,7 +141,7 @@ impl ApiContract for DasApi {
             owner_address,
             sort_by,
             limit,
-            page,
+            mut page,
             before,
             after,
         } = payload;
@@ -150,7 +150,7 @@ impl ApiContract for DasApi {
         let owner_address = validate_pubkey(owner_address.clone())?;
         let owner_address_bytes = owner_address.to_bytes().to_vec();
         let sort_by = sort_by.unwrap_or_default();
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
         };
@@ -177,14 +177,14 @@ impl ApiContract for DasApi {
             group_value,
             sort_by,
             limit,
-            page,
+            mut page,
             before,
             after,
         } = payload;
         let before: Option<String> = before.filter(|before| !before.is_empty());
         let after: Option<String> = after.filter(|after| !after.is_empty());
         let sort_by = sort_by.unwrap_or_default();
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
         };
@@ -212,14 +212,14 @@ impl ApiContract for DasApi {
             only_verified,
             sort_by,
             limit,
-            page,
+            mut page,
             before,
             after,
         } = payload;
         let creator_address = validate_pubkey(creator_address.clone())?;
         let creator_address_bytes = creator_address.to_bytes().to_vec();
 
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
         let sort_by = sort_by.unwrap_or_default();
         let only_verified = only_verified.unwrap_or_default();
         let transform = AssetTransform {
@@ -248,14 +248,14 @@ impl ApiContract for DasApi {
             authority_address,
             sort_by,
             limit,
-            page,
+            mut page,
             before,
             after,
         } = payload;
         let sort_by = sort_by.unwrap_or_default();
         let authority_address = validate_pubkey(authority_address.clone())?;
         let authority_address_bytes = authority_address.to_bytes().to_vec();
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
         };
@@ -297,13 +297,13 @@ impl ApiContract for DasApi {
             burnt,
             sort_by,
             limit,
-            page,
+            mut page,
             before,
             after,
             json_uri,
         } = payload;
         // Deserialize search assets query
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
         let spec: Option<(SpecificationVersions, SpecificationAssetClass)> =
             interface.map(|x| x.into());
         let specification_version = spec.clone().map(|x| x.0);
@@ -393,13 +393,13 @@ impl ApiContract for DasApi {
         let GetSignaturesForAsset {
             id,
             limit,
-            page,
+            mut page,
             before,
             after,
         } = payload;
         let id = validate_pubkey(id.clone())?;
         let id = id.to_bytes().to_vec();
-        self.validate_pagination(&limit, &page, &before, &after)?;
+        self.validate_pagination(&limit, &mut page, &before, &after)?;
 
         get_signatures_for_asset(
             &self.db_connection,
