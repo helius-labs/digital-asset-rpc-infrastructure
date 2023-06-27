@@ -50,6 +50,10 @@ pub enum IngesterError {
     CacheStorageWriteError(String),
     #[error("HttpError {status_code}")]
     HttpError { status_code: String },
+    #[error("TransactionIndex Error {0}")]
+    TransactionIndexError(String),
+    #[error("AccountIndex Error {0}")]
+    AccountIndexError(String),
 }
 
 impl From<reqwest::Error> for IngesterError {

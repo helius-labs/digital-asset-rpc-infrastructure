@@ -94,6 +94,39 @@ pub fn capture_result(
             }
             ret_id = Some(id);
         }
+        Err(IngesterError::DatabaseError(e)) => {
+            metric! {
+                statsd_count!("ingester.database_error", 1, label.0 => &label.1, "stream" => stream, "error" => "db");
+            }
+            if let Some(sig) = txn_sig {
+                warn!("Error database txn {}: {:?}", sig, e);
+            } else {
+                warn!("{}", e);
+            }
+            ret_id = Some(id);
+        }
+        Err(IngesterError::TransactionIndexError(e)) => {
+            metric! {
+                statsd_count!("ingester.transaction_index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "tx");
+            }
+            if let Some(sig) = txn_sig {
+                warn!("Error indexing transaction {}: {:?}", sig, e);
+            } else {
+                warn!("Error indexing transaction: {}", e);
+            }
+            ret_id = Some(id);
+        }
+        Err(IngesterError::AccountIndexError(e)) => {
+            metric! {
+                statsd_count!("ingester.account_index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "acc");
+            }
+            if let Some(sig) = txn_sig {
+                warn!("Error indexing account {}: {:?}", sig, e);
+            } else {
+                warn!("Error indexing account: {}", e);
+            }
+            ret_id = Some(id);
+        }
         Err(err) => {
             if let Some(sig) = txn_sig {
                 error!("Error handling update for txn {}: {:?}", sig, err);
