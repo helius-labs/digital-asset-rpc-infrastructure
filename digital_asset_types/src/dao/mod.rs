@@ -180,13 +180,7 @@ impl SearchAssetsQuery {
             .add_option(self.burnt.map(|x| asset::Column::Burnt.eq(x)));
 
         if let Some(c) = self.creator_address.to_owned() {
-            let mut cond = Condition::all().add(asset_creators::Column::Creator.eq(c));
-            if let Some(cv) = self.creator_verified {
-                cond = cond.add(asset_creators::Column::Verified.eq(cv));
-            }
-
-            conditions = conditions.add(cond);
-
+            conditions = conditions.add(asset_creators::Column::Creator.eq(c));
             let rel = asset_creators::Relation::Asset
                 .def()
                 .rev()
@@ -196,6 +190,23 @@ impl SearchAssetsQuery {
                         .into_condition()
                 });
             joins.push(rel);
+        }
+
+        if let Some(cv) = self.creator_verified {
+            conditions = conditions.add(asset_creators::Column::Verified.eq(cv));
+            // don't add the join twice
+            if self.creator_address.is_none() {
+                let rel =
+                    asset_creators::Relation::Asset
+                        .def()
+                        .rev()
+                        .on_condition(|left, right| {
+                            Expr::tbl(right, asset_creators::Column::AssetId)
+                                .eq(Expr::tbl(left, asset::Column::Id))
+                                .into_condition()
+                        });
+                joins.push(rel);
+            }
         }
 
         if let Some(a) = self.authority_address.to_owned() {
@@ -228,8 +239,7 @@ impl SearchAssetsQuery {
         }
 
         if let Some(ju) = self.json_uri.to_owned() {
-            let cond = Condition::all()
-                .add(asset_data::Column::MetadataUrl.eq(ju));
+            let cond = Condition::all().add(asset_data::Column::MetadataUrl.eq(ju));
             conditions = conditions.add(cond);
             let rel = asset_data::Relation::Asset
                 .def()
