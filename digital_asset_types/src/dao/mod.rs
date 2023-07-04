@@ -181,6 +181,17 @@ impl SearchAssetsQuery {
 
         if let Some(c) = self.creator_address.to_owned() {
             conditions = conditions.add(asset_creators::Column::Creator.eq(c));
+        }
+
+        // N.B. Something to consider is that without specifying the creators themselves,
+        // there is no index being hit. That means in some scenarios this query could be very slow.
+        // But those should only happen in rare scenarios.
+        if let Some(cv) = self.creator_verified.to_owned() {
+            conditions = conditions.add(asset_creators::Column::Verified.eq(cv));
+        }
+
+        // If creator_address or creator_verified is set, join with asset_creators
+        if self.creator_address.is_some() || self.creator_verified.is_some() {
             let rel = asset_creators::Relation::Asset
                 .def()
                 .rev()
@@ -190,23 +201,6 @@ impl SearchAssetsQuery {
                         .into_condition()
                 });
             joins.push(rel);
-        }
-
-        if let Some(cv) = self.creator_verified {
-            conditions = conditions.add(asset_creators::Column::Verified.eq(cv));
-            // don't add the join twice
-            if self.creator_address.is_none() {
-                let rel =
-                    asset_creators::Relation::Asset
-                        .def()
-                        .rev()
-                        .on_condition(|left, right| {
-                            Expr::tbl(right, asset_creators::Column::AssetId)
-                                .eq(Expr::tbl(left, asset::Column::Id))
-                                .into_condition()
-                        });
-                joins.push(rel);
-            }
         }
 
         if let Some(a) = self.authority_address.to_owned() {
