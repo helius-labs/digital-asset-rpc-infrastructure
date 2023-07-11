@@ -1,6 +1,6 @@
 use crate::{error::IngesterError, metric};
 use async_trait::async_trait;
-use cadence_macros::{is_global_default_set, statsd_count, statsd_histogram};
+use cadence_macros::{is_global_default_set, statsd_count, statsd_gauge, statsd_histogram};
 use chrono::{Duration, NaiveDateTime, Utc};
 use crypto::{digest::Digest, sha2::Sha256};
 use digital_asset_types::dao::{sea_orm_active_enums::TaskStatus, tasks};
@@ -191,6 +191,26 @@ impl TaskManager {
             .map_err(|e| e.into())
     }
 
+    pub async fn get_task_queue_depth(conn: &DatabaseConnection) -> Result<u64, IngesterError> {
+        tasks::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(tasks::Column::Status.ne(TaskStatus::Success))
+                    .add(
+                        Condition::any()
+                            .add(tasks::Column::LockedUntil.lte(Utc::now()))
+                            .add(tasks::Column::LockedUntil.is_null()),
+                    )
+                    .add(
+                        Expr::col(tasks::Column::Attempts)
+                            .less_than(Expr::col(tasks::Column::MaxAttempts)),
+                    ),
+            )
+            .count(conn)
+            .await
+            .map_err(|e| e.into())
+    }
+
     pub fn get_sender(&self) -> Result<UnboundedSender<TaskData>, IngesterError> {
         self.producer
             .clone()
@@ -323,11 +343,9 @@ impl TaskManager {
     }
 
     pub fn start_runner(&self) -> JoinHandle<()> {
-        let task_map = self.registered_task_types.clone();
         let pool = self.pool.clone();
-        let instance_name = self.instance_name.clone();
         tokio::spawn(async move {
-            let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+            let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
             let mut interval = time::interval(tokio::time::Duration::from_millis(DELETE_INTERVAL));
             loop {
                 interval.tick().await; // ticks immediately
@@ -342,8 +360,32 @@ impl TaskManager {
                 };
             }
         });
+
+        let pool = self.pool.clone();
+        tokio::spawn(async move {
+            let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+            let mut interval = time::interval(tokio::time::Duration::from_millis(RETRY_INTERVAL));
+            loop {
+                interval.tick().await; // ticks immediately
+                let res = TaskManager::get_task_queue_depth(&conn).await;
+                match res {
+                    Ok(depth) => {
+                        debug!("Task queue depth: {}", depth);
+                        metric! {
+                            statsd_gauge!("ingester.bgtask.queue_depth", depth);
+                        }
+                    }
+                    Err(e) => {
+                        error!("error getting queue depth: {}", e);
+                    }
+                };
+            }
+        });
+
         let pool = self.pool.clone();
         let ipfs_gateway = self.ipfs_gateway.clone();
+        let task_map = self.registered_task_types.clone();
+        let instance_name = self.instance_name.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(tokio::time::Duration::from_millis(RETRY_INTERVAL));
             let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
