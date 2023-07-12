@@ -34,6 +34,7 @@ pub trait BgTask: Send + Sync {
 }
 
 const RETRY_INTERVAL: u64 = 1000;
+const QUEUE_DEPTH_INTERVAL: u64 = 2500;
 const DELETE_INTERVAL: u64 = 30000;
 const MAX_TASK_BATCH_SIZE: u64 = 100;
 
@@ -193,19 +194,7 @@ impl TaskManager {
 
     pub async fn get_task_queue_depth(conn: &DatabaseConnection) -> Result<u64, IngesterError> {
         tasks::Entity::find()
-            .filter(
-                Condition::all()
-                    .add(tasks::Column::Status.ne(TaskStatus::Success))
-                    .add(
-                        Condition::any()
-                            .add(tasks::Column::LockedUntil.lte(Utc::now()))
-                            .add(tasks::Column::LockedUntil.is_null()),
-                    )
-                    .add(
-                        Expr::col(tasks::Column::Attempts)
-                            .less_than(Expr::col(tasks::Column::MaxAttempts)),
-                    ),
-            )
+            .filter(tasks::Column::Status.eq(TaskStatus::Pending))
             .count(conn)
             .await
             .map_err(|e| e.into())
@@ -364,7 +353,8 @@ impl TaskManager {
         let pool = self.pool.clone();
         tokio::spawn(async move {
             let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-            let mut interval = time::interval(tokio::time::Duration::from_millis(RETRY_INTERVAL));
+            let mut interval =
+                time::interval(tokio::time::Duration::from_millis(QUEUE_DEPTH_INTERVAL));
             loop {
                 interval.tick().await; // ticks immediately
                 let res = TaskManager::get_task_queue_depth(&conn).await;
