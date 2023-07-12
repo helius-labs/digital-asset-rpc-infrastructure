@@ -121,7 +121,7 @@ where
                 );
                 txn.execute(query)
                     .await
-                    .map_err(|db_err| IngesterError::TransactionIndexError(db_err.to_string()))?;
+                    .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
                 // Insert into `asset` table.
                 let delegate = if owner == delegate {
                     None
@@ -174,7 +174,7 @@ where
                     .build(DbBackend::Postgres);
                 txn.execute(query)
                     .await
-                    .map_err(|db_err| IngesterError::TransactionIndexError(db_err.to_string()))?;
+                    .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
                 let attachment = asset_v1_account_attachments::ActiveModel {
                     id: Set(edition_attachment_address.to_bytes().to_vec()),
@@ -192,7 +192,7 @@ where
                     .build(DbBackend::Postgres);
                 txn.execute(query)
                     .await
-                    .map_err(|db_err| IngesterError::TransactionIndexError(db_err.to_string()))?;
+                    .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
                 // Insert into `asset_creators` table.
                 let creators = &metadata.creators;
@@ -232,9 +232,9 @@ where
                             .to_owned(),
                         )
                         .build(DbBackend::Postgres);
-                    txn.execute(query).await.map_err(|db_err| {
-                        IngesterError::TransactionIndexError(db_err.to_string())
-                    })?;
+                    txn.execute(query)
+                        .await
+                        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
                 }
                 // Insert into `asset_authority` table.
                 let model = asset_authority::ActiveModel {
@@ -256,7 +256,7 @@ where
                     .build(DbBackend::Postgres);
                 txn.execute(query)
                     .await
-                    .map_err(|db_err| IngesterError::TransactionIndexError(db_err.to_string()))?;
+                    .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
                 // Insert into `asset_grouping` table.
                 if let Some(c) = &metadata.collection {
@@ -282,9 +282,9 @@ where
                                 .to_owned(),
                             )
                             .build(DbBackend::Postgres);
-                        txn.execute(query).await.map_err(|db_err| {
-                            IngesterError::TransactionIndexError(db_err.to_string())
-                        })?;
+                        txn.execute(query)
+                            .await
+                            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
                     }
                 }
                 let mut task = DownloadMetadata {

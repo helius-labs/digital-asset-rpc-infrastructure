@@ -105,25 +105,14 @@ pub fn capture_result(
             }
             ret_id = Some(id);
         }
-        Err(IngesterError::TransactionIndexError(e)) => {
+        Err(IngesterError::AssetIndexError(e)) => {
             metric! {
-                statsd_count!("ingester.transaction_index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "tx");
+                statsd_count!("ingester.index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "index");
             }
             if let Some(sig) = txn_sig {
                 warn!("Error indexing transaction {}: {:?}", sig, e);
             } else {
-                warn!("Error indexing transaction: {}", e);
-            }
-            ret_id = Some(id);
-        }
-        Err(IngesterError::AccountIndexError(e)) => {
-            metric! {
-                statsd_count!("ingester.account_index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "acc");
-            }
-            if let Some(sig) = txn_sig {
-                warn!("Error indexing account {}: {:?}", sig, e);
-            } else {
-                warn!("Error indexing account: {}", e);
+                warn!("Error indexing account: {:?}", e);
             }
             ret_id = Some(id);
         }
