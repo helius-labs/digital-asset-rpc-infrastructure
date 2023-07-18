@@ -414,12 +414,12 @@ impl ApiContract for DasApi {
         get_signatures_for_asset(
             &self.db_connection,
             id,
+            tree,
+            leaf_index,
             limit.map(|x| x as u64).unwrap_or(1000),
             page.map(|x| x as u64),
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
-            tree,
-            leaf_index,
         )
         .await
         .map_err(Into::into)
