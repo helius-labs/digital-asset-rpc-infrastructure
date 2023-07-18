@@ -401,7 +401,9 @@ impl ApiContract for DasApi {
             leaf_index,
         } = payload;
 
-        if id.is_none() && (tree.is_none() || leaf_index.is_none()) {
+        if !((id.is_some() && tree.is_none() && leaf_index.is_none())
+            || (id.is_none() && tree.is_some() && leaf_index.is_some()))
+        {
             return Err(DasApiError::ValidationError(
                 "Must provide either 'id' or both 'tree' and 'leafIndex'".to_string(),
             ));
