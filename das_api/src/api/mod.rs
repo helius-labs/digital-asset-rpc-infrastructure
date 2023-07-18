@@ -111,7 +111,7 @@ pub struct GetSignaturesForAsset {
     pub before: Option<String>,
     pub after: Option<String>,
     pub tree: Option<String>,
-    pub leaf_id: Option<String>,
+    pub leaf_index: Option<i64>,
 }
 
 #[document_rpc]

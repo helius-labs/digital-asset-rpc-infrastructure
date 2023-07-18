@@ -398,17 +398,16 @@ impl ApiContract for DasApi {
             before,
             after,
             tree,
-            leaf_id,
+            leaf_index,
         } = payload;
 
-        if id.is_none() && (tree.is_none() || leaf_id.is_none()) {
+        if id.is_none() && (tree.is_none() || leaf_index.is_none()) {
             return Err(DasApiError::ValidationError(
-                "Must provide either id or both tree and leaf_id".to_string(),
+                "Must provide either 'id' or both 'tree' and 'leafIndex'".to_string(),
             ));
         }
         let id = validate_opt_pubkey(&id)?;
         let tree = validate_opt_pubkey(&tree)?;
-        let leaf_id = validate_opt_pubkey(&leaf_id)?;
 
         self.validate_pagination(&limit, &page, &before, &after)?;
 
@@ -420,7 +419,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             tree,
-            leaf_id,
+            leaf_index,
         )
         .await
         .map_err(Into::into)

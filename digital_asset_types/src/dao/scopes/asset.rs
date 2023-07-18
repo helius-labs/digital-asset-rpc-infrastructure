@@ -327,29 +327,25 @@ pub async fn get_signatures_for_asset(
     pagination: &Pagination,
     limit: u64,
     tree_id: Option<Vec<u8>>,
-    leaf_id: Option<Vec<u8>>,
+    leaf_idx: Option<i64>,
 ) -> Result<Vec<Vec<String>>, DbErr> {
-    let mut stmt = asset::Entity::find();
+    if let (Some(tree_id), Some(leaf_idx)) = (tree_id, leaf_idx) {
+        let transactions = fetch_transactions(conn, tree_id, leaf_idx, pagination, limit).await?;
+        return Ok(transactions);
+    }
 
-    if let Some(asset_id) = asset_id {
-        stmt = stmt
-            .filter(asset::Column::Id.eq(asset_id))
-            .order_by(asset::Column::Id, Order::Desc)
-            .limit(1);
-    } else if let (Some(tree_id), Some(leaf_id)) = (tree_id, leaf_id) {
-        stmt = stmt
-            .filter(asset::Column::TreeId.eq(tree_id))
-            .filter(asset::Column::Leaf.eq(leaf_id))
-            // .order_by(??, Order::Desc)
-            .limit(1);
-    } else {
+    if asset_id.is_none() {
         return Err(DbErr::Custom(
-            "Either asset_id or both tree_id and leaf_id must be provided".to_string(),
+            "Either 'id' or both 'tree' and 'leafIndex' must be provided".to_string(),
         ));
     }
 
+    let stmt = asset::Entity::find()
+        .distinct_on([(asset::Entity, asset::Column::Id)])
+        .filter(asset::Column::Id.eq(asset_id))
+        .order_by(asset::Column::Id, Order::Desc)
+        .limit(1);
     let asset = stmt.one(conn).await?;
-
     if let Some(asset) = asset {
         let tree = asset
             .tree_id
