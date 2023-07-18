@@ -305,14 +305,17 @@ pub async fn get_by_id(
 pub async fn fetch_transactions(
     conn: &impl ConnectionTrait,
     tree: Vec<u8>,
-    leaf_id: i64,
+    leaf_id: Option<i64>,
     pagination: &Pagination,
     limit: u64,
 ) -> Result<Vec<Vec<String>>, DbErr> {
     let mut stmt = cl_audits::Entity::find()
-        .filter(cl_audits::Column::Tree.eq(tree))
-        .filter(cl_audits::Column::LeafIdx.eq(leaf_id))
-        .order_by(cl_audits::Column::CreatedAt, sea_orm::Order::Desc);
+        .filter(cl_audits::Column::Tree.eq(tree));
+
+    if let Some(id) = leaf_id {
+        stmt = stmt.filter(cl_audits::Column::LeafIdx.eq(id));
+    }
+    stmt = stmt.order_by(cl_audits::Column::CreatedAt, sea_orm::Order::Desc);
 
     stmt = paginate(pagination, limit, stmt);
     let transactions = stmt.all(conn).await?;
