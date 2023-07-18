@@ -397,9 +397,19 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
+            tree,
+            leaf_id,
         } = payload;
-        let id = validate_pubkey(id.clone())?;
-        let id = id.to_bytes().to_vec();
+
+        if id.is_none() && (tree.is_none() || leaf_id.is_none()) {
+            return Err(DasApiError::ValidationError(
+                "Must provide either id or both tree and leaf_id".to_string(),
+            ));
+        }
+        let id = validate_opt_pubkey(&id)?;
+        let tree = validate_opt_pubkey(&tree)?;
+        let leaf_id = validate_opt_pubkey(&leaf_id)?;
+
         self.validate_pagination(&limit, &page, &before, &after)?;
 
         get_signatures_for_asset(
@@ -409,6 +419,8 @@ impl ApiContract for DasApi {
             page.map(|x| x as u64),
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
+            tree,
+            leaf_id,
         )
         .await
         .map_err(Into::into)

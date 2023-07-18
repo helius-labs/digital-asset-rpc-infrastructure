@@ -323,15 +323,30 @@ pub async fn fetch_transactions(
 
 pub async fn get_signatures_for_asset(
     conn: &impl ConnectionTrait,
-    asset_id: Vec<u8>,
+    asset_id: Option<Vec<u8>>,
     pagination: &Pagination,
     limit: u64,
+    tree_id: Option<Vec<u8>>,
+    leaf_id: Option<Vec<u8>>,
 ) -> Result<Vec<Vec<String>>, DbErr> {
-    let mut stmt = asset::Entity::find().distinct_on([(asset::Entity, asset::Column::Id)]);
-    stmt = stmt
-        .filter(asset::Column::Id.eq(asset_id))
-        .order_by(asset::Column::Id, Order::Desc)
-        .limit(1);
+    let mut stmt = asset::Entity::find();
+
+    if let Some(asset_id) = asset_id {
+        stmt = stmt
+            .filter(asset::Column::Id.eq(asset_id))
+            .order_by(asset::Column::Id, Order::Desc)
+            .limit(1);
+    } else if let (Some(tree_id), Some(leaf_id)) = (tree_id, leaf_id) {
+        stmt = stmt
+            .filter(asset::Column::TreeId.eq(tree_id))
+            .filter(asset::Column::Leaf.eq(leaf_id))
+            // .order_by(??, Order::Desc)
+            .limit(1);
+    } else {
+        return Err(DbErr::Custom(
+            "Either asset_id or both tree_id and leaf_id must be provided".to_string(),
+        ));
+    }
 
     let asset = stmt.one(conn).await?;
 
