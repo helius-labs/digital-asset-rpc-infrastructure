@@ -18,7 +18,7 @@ pub async fn get_signatures_for_asset(
 ) -> Result<TransactionSignatureList, DbErr> {
     let pagination = create_pagination(before, after, page)?;
     let transactions =
-        scopes::asset::get_signatures_for_asset(db, asset_id, &pagination, limit, tree, leaf_idx)
+        scopes::asset::get_signatures_for_asset(db, asset_id, tree, leaf_idx, &pagination, limit)
             .await?;
     Ok(build_transaction_signatures_response(
         transactions,

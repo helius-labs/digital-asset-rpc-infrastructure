@@ -324,11 +324,12 @@ pub async fn fetch_transactions(
 pub async fn get_signatures_for_asset(
     conn: &impl ConnectionTrait,
     asset_id: Option<Vec<u8>>,
-    pagination: &Pagination,
-    limit: u64,
     tree_id: Option<Vec<u8>>,
     leaf_idx: Option<i64>,
+    pagination: &Pagination,
+    limit: u64,
 ) -> Result<Vec<Vec<String>>, DbErr> {
+    // if tree_id and leaf_idx are provided, use them directly to fetch transactions
     if let (Some(tree_id), Some(leaf_idx)) = (tree_id, leaf_idx) {
         let transactions = fetch_transactions(conn, tree_id, leaf_idx, pagination, limit).await?;
         return Ok(transactions);
@@ -340,6 +341,8 @@ pub async fn get_signatures_for_asset(
         ));
     }
 
+    // if only asset_id is provided, fetch the latest tree and leaf_idx (asset.nonce) for the asset
+    // and use them to fetch transactions
     let stmt = asset::Entity::find()
         .distinct_on([(asset::Entity, asset::Column::Id)])
         .filter(asset::Column::Id.eq(asset_id))
