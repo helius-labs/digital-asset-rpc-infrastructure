@@ -107,6 +107,7 @@ async fn simple_content() {
         Some(serde_json::Value::String(symbol)) => assert_eq!(symbol, ""),
         _ => panic!("symbol key not found or not a string"),
     }
+
     assert_eq!(
         parsed
             .clone()
