@@ -1,5 +1,6 @@
-use crate::{error::IngesterError, tasks::TaskData};
+use crate::{error::IngesterError, metric, tasks::TaskData};
 use blockbuster::programs::token_account::TokenProgramAccount;
+use cadence_macros::{is_global_default_set, statsd_count};
 use digital_asset_types::dao::{asset, token_accounts, tokens};
 use plerkle_serialization::AccountInfo;
 use sea_orm::{
@@ -66,22 +67,73 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 query.sql
             );
             db.execute(query).await?;
+
+            // Metrics
+            let mut token_owner_update = false;
+            let mut token_delegate_update = false;
+            let mut token_freeze_update = false;
+
             let txn = db.begin().await?;
-            let asset_update: Option<asset::Model> = asset::Entity::find_by_id(mint)
+            let asset_update = asset::Entity::find_by_id(mint)
                 .filter(asset::Column::OwnerType.eq("single"))
                 .one(&txn)
                 .await?;
+
             if let Some(asset) = asset_update {
-                // will only update owner if token account balance is non-zero
-                if ta.amount > 0 {
+                // Only handle token account updates for NFTs (supply=1)
+                // TODO: Support fungible tokens
+                let asset_clone = asset.clone();
+                if asset_clone.supply == 1 {
+                    let mut save_required = false;
                     let mut active: asset::ActiveModel = asset.into();
-                    active.owner = Set(Some(owner));
-                    active.delegate = Set(delegate);
-                    active.frozen = Set(frozen);
-                    active.save(&txn).await?;
+
+                    // Handle ownership updates
+                    let old_owner = asset_clone.owner.clone();
+                    let new_owner = owner.clone();
+                    if ta.amount > 0 && Some(new_owner) != old_owner {
+                        active.owner = Set(Some(owner.clone()));
+                        token_owner_update = true;
+                        save_required = true;
+                    }
+
+                    // Handle delegate updates
+                    if ta.amount > 0 && delegate.clone() != asset_clone.delegate {
+                        active.delegate = Set(delegate.clone());
+                        token_delegate_update = true;
+                        save_required = true;
+                    }
+
+                    // Handle freeze updates
+                    if ta.amount > 0 && frozen != asset_clone.frozen {
+                        active.frozen = Set(frozen);
+                        token_freeze_update = true;
+                        save_required = true;
+                    }
+
+                    if save_required {
+                        active.save(&txn).await?;
+                    }
                 }
             }
             txn.commit().await?;
+
+            // Publish metrics outside of the txn to reduce txn latency.
+            if token_owner_update {
+                metric! {
+                    statsd_count!("token_account.owner_update", 1);
+                }
+            }
+            if token_delegate_update {
+                metric! {
+                    statsd_count!("token_account.delegate_update", 1);
+                }
+            }
+            if token_freeze_update {
+                metric! {
+                    statsd_count!("token_account.freeze_update", 1);
+                }
+            }
+
             Ok(())
         }
         TokenProgramAccount::Mint(m) => {

@@ -93,15 +93,19 @@ async fn handle_transaction(manager: Arc<ProgramTransformer>, item: RecvData) ->
 
         let begin = Instant::now();
         let res = manager.handle_transaction(&tx).await;
-        ret_id = capture_result(
-            id,
+        let should_ack = capture_result(
+            id.clone(),
             TRANSACTION_STREAM,
             ("txn", "txn"),
             item.tries,
             res,
             begin,
             tx.signature(),
+            None,
         );
+        if should_ack {
+            ret_id = Some(id);
+        }
     }
     ret_id
 }

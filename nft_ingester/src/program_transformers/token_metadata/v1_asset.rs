@@ -17,13 +17,13 @@ use digital_asset_types::{
     json::ChainDataV1,
 };
 
+use log::warn;
 use num_traits::FromPrimitive;
 use plerkle_serialization::Pubkey as FBPubkey;
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ActiveValue::Set, ConnectionTrait, DbBackend,
     DbErr, EntityTrait, JsonValue,
 };
-
 
 use crate::tasks::{DownloadMetadata, IntoTaskData};
 
@@ -32,26 +32,17 @@ pub async fn burn_v1_asset<T: ConnectionTrait + TransactionTrait>(
     id: FBPubkey,
     slot: u64,
 ) -> Result<(), IngesterError> {
-    let id = id.0;
-    let slot_i = slot as i64;
+    let (id, slot_i) = (id.0, slot as i64);
     let model = asset::ActiveModel {
         id: Set(id.to_vec()),
         slot_updated: Set(slot_i),
         burnt: Set(true),
         ..Default::default()
     };
-
-    let mut query = asset::Entity::insert(model)
-        .on_conflict(
-            OnConflict::columns([asset::Column::Id])
-                .update_columns([asset::Column::SlotUpdated, asset::Column::Burnt])
-                .to_owned(),
-        )
+    // If the asset hasn't been indexed yet, we don't do anything.
+    let query = asset::Entity::update(model)
+        .filter(asset::Column::SlotUpdated.lt(slot_i))
         .build(DbBackend::Postgres);
-    query.sql = format!(
-        "{} WHERE excluded.slot_updated > asset.slot_updated",
-        query.sql
-    );
     conn.execute(query).await?;
     Ok(())
 }
@@ -61,7 +52,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     id: FBPubkey,
     slot: u64,
     metadata: &Metadata,
-) -> Result<TaskData, IngesterError> {
+) -> Result<Option<TaskData>, IngesterError> {
     let metadata = metadata.clone();
     let data = metadata.data;
     let meta_mint_pubkey = metadata.mint;
@@ -71,11 +62,6 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     let id = id.0;
     let slot_i = slot as i64;
     let uri = data.uri.trim().replace('\0', "");
-    if uri.is_empty() {
-        return Err(IngesterError::DeserializationError(
-            "URI is empty".to_string(),
-        ));
-    }
     let _spec = SpecificationVersions::V1;
     let class = match metadata.token_standard {
         Some(TokenStandard::NonFungible) => SpecificationAssetClass::Nft,
@@ -148,7 +134,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
     let asset_data_model = asset_data::ActiveModel {
         chain_data_mutability: Set(chain_mutability),
         chain_data: Set(chain_data_json),
-        metadata_url: Set(data.uri.trim().replace('\0', "")),
+        metadata_url: Set(uri.clone()),
         metadata: Set(JsonValue::String("processing".to_string())),
         metadata_mutability: Set(Mutability::Mutable),
         slot_updated: Set(slot_i),
@@ -176,7 +162,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         "{} WHERE excluded.slot_updated > asset_data.slot_updated",
         query.sql
     );
-    let _res = txn.execute(query).await?;
+    txn.execute(query)
+        .await
+        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     let model = asset::ActiveModel {
         id: Set(id.to_vec()),
         owner,
@@ -233,7 +221,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         "{} WHERE excluded.slot_updated > asset.slot_updated",
         query.sql
     );
-    txn.execute(query).await?;
+    txn.execute(query)
+        .await
+        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     let attachment = asset_v1_account_attachments::ActiveModel {
         id: Set(edition_attachment_address.to_bytes().to_vec()),
         slot_updated: Set(slot_i),
@@ -247,7 +237,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
-    txn.execute(query).await?;
+    txn.execute(query)
+        .await
+        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     let model = asset_authority::ActiveModel {
         asset_id: Set(id.to_vec()),
         authority: Set(authority),
@@ -270,7 +262,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         "{} WHERE excluded.slot_updated > asset_authority.slot_updated",
         query.sql
     );
-    txn.execute(query).await?;
+    txn.execute(query)
+        .await
+        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     if let Some(c) = &metadata.collection {
         if c.verified {
             let model = asset_grouping::ActiveModel {
@@ -300,7 +294,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                     "{} WHERE excluded.slot_updated > asset_grouping.slot_updated AND excluded.seq >= asset_grouping.seq",
                     query.sql
                 );
-            txn.execute(query).await?;
+            txn.execute(query)
+                .await
+                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }
 
@@ -361,15 +357,26 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 "{} WHERE excluded.slot_updated > asset_creators.slot_updated",
                 query.sql
             );
-            txn.execute(query).await?;
+            txn.execute(query)
+                .await
+                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }
     txn.commit().await?;
+    if uri.is_empty() {
+        warn!(
+            "URI is empty for mint {}. Skipping background task.",
+            bs58::encode(mint).into_string()
+        );
+        return Ok(None);
+    }
+
     let mut task = DownloadMetadata {
         asset_data_id: id.to_vec(),
         uri,
         created_at: Some(Utc::now().naive_utc()),
     };
     task.sanitize();
-    task.into_task_data()
+    let t = task.into_task_data()?;
+    Ok(Some(t))
 }

@@ -53,6 +53,7 @@ pub struct SearchAssetsQuery {
     pub royalty_target: Option<Vec<u8>>,
     pub royalty_amount: Option<u32>,
     pub burnt: Option<bool>,
+    pub json_uri: Option<String>,
 }
 
 impl SearchAssetsQuery {
@@ -109,6 +110,9 @@ impl SearchAssetsQuery {
             num_conditions += 1;
         }
         if self.grouping.is_some() {
+            num_conditions += 1;
+        }
+        if self.json_uri.is_some() {
             num_conditions += 1;
         }
 
@@ -176,13 +180,17 @@ impl SearchAssetsQuery {
             .add_option(self.burnt.map(|x| asset::Column::Burnt.eq(x)));
 
         if let Some(c) = self.creator_address.to_owned() {
-            let mut cond = Condition::all().add(asset_creators::Column::Creator.eq(c));
-            if let Some(cv) = self.creator_verified {
-                cond = cond.add(asset_creators::Column::Verified.eq(cv));
-            }
+            conditions = conditions.add(asset_creators::Column::Creator.eq(c));
+        }
 
-            conditions = conditions.add(cond);
+        // Without specifying the creators themselves, there is no index being hit.
+        // So in some rare scenarios, this query could be very slow.
+        if let Some(cv) = self.creator_verified.to_owned() {
+            conditions = conditions.add(asset_creators::Column::Verified.eq(cv));
+        }
 
+        // If creator_address or creator_verified is set, join with asset_creators
+        if self.creator_address.is_some() || self.creator_verified.is_some() {
             let rel = asset_creators::Relation::Asset
                 .def()
                 .rev()
@@ -218,6 +226,20 @@ impl SearchAssetsQuery {
                 .on_condition(|left, right| {
                     Expr::tbl(right, asset_grouping::Column::AssetId)
                         .eq(Expr::tbl(left, asset::Column::Id))
+                        .into_condition()
+                });
+            joins.push(rel);
+        }
+
+        if let Some(ju) = self.json_uri.to_owned() {
+            let cond = Condition::all().add(asset_data::Column::MetadataUrl.eq(ju));
+            conditions = conditions.add(cond);
+            let rel = asset_data::Relation::Asset
+                .def()
+                .rev()
+                .on_condition(|left, right| {
+                    Expr::tbl(right, asset_data::Column::Id)
+                        .eq(Expr::tbl(left, asset::Column::AssetData))
                         .into_condition()
                 });
             joins.push(rel);

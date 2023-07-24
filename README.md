@@ -1,4 +1,24 @@
-## IMPORTANT: See Prerequisites below
+# Helius Digital Asset RPC Infrastructure
+
+## Disclaimer
+
+This is the Helius version of the DAS system. Please note that we have diverged from the original repository.
+Helius has been consistently upgrading, fixing, and changing the DAS system for our customers. **Use at your own risk**.
+
+### Branch Management
+
+All custom Helius work is done under the `helius` branch.
+Changes directly compatible with the Metaplex repository are merged into the `main` branch. We periodically backport general fixes and improvements into the original repository.
+
+### Contribution
+
+PRs are welcome! This is the quickest way to get your changes ingested into the Helius system. PR's should be made against the `helius` branch. Please include testing details.
+
+<br/>
+
+---
+
+<br/>
 
 ## Digital Asset RPC API Infrastructure
 

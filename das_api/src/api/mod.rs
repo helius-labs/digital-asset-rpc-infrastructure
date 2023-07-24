@@ -65,7 +65,7 @@ pub struct SearchAssets {
     pub creator_verified: Option<bool>,
     pub authority_address: Option<String>,
     pub grouping: Option<(String, String)>,
-    pub delegate: Option<Vec<u8>>,
+    pub delegate: Option<String>,
     pub frozen: Option<bool>,
     pub supply: Option<u64>,
     pub supply_mint: Option<String>,
@@ -80,6 +80,8 @@ pub struct SearchAssets {
     pub page: Option<u32>,
     pub before: Option<String>,
     pub after: Option<String>,
+    #[serde(default)]
+    pub json_uri: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -104,11 +106,13 @@ pub struct GetGrouping {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetSignaturesForAsset {
-    pub id: String,
+    pub id: Option<String>,
     pub limit: Option<u32>,
     pub page: Option<u32>,
     pub before: Option<String>,
     pub after: Option<String>,
+    pub tree: Option<String>,
+    pub leaf_index: Option<i64>,
 }
 
 #[document_rpc]
