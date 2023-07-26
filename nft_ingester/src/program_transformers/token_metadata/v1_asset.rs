@@ -268,67 +268,40 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     if let Some(c) = &metadata.collection {
-        if c.verified {
-            let model = asset_grouping::ActiveModel {
-                asset_id: Set(id.to_vec()),
-                group_key: Set("collection".to_string()),
-                group_value: Set(Some(c.key.to_string())),
-                seq: Set(0),
-                slot_updated: Set(slot_i),
-                ..Default::default()
-            };
-            let mut query = asset_grouping::Entity::insert(model)
-                .on_conflict(
-                    OnConflict::columns([
-                        asset_grouping::Column::AssetId,
-                        asset_grouping::Column::GroupKey,
-                    ])
-                    .update_columns([
-                        asset_grouping::Column::GroupKey,
-                        asset_grouping::Column::GroupValue,
-                        asset_grouping::Column::Seq,
-                        asset_grouping::Column::SlotUpdated,
-                    ])
-                    .to_owned(),
-                )
-                .build(DbBackend::Postgres);
-            query.sql = format!(
-                    "{} WHERE excluded.slot_updated > asset_grouping.slot_updated AND excluded.seq >= asset_grouping.seq",
-                    query.sql
-                );
-            txn.execute(query)
-                .await
-                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-        } else {
-            let model = asset_grouping::ActiveModel {
-                asset_id: Set(id.to_vec()),
-                group_key: Set("collection".to_string()),
-                group_value: Set(None),
-                seq: Set(0),
-                slot_updated: Set(slot_i),
-                ..Default::default()
-            };
-            let mut query = asset_grouping::Entity::insert(model)
-                .on_conflict(
-                    OnConflict::columns([
-                        asset_grouping::Column::AssetId,
-                        asset_grouping::Column::GroupKey,
-                    ])
-                    .update_columns([
-                        asset_grouping::Column::GroupValue,
-                        asset_grouping::Column::SlotUpdated,
-                    ])
-                    .to_owned(),
-                )
-                .build(DbBackend::Postgres);
-            query.sql = format!(
+        let group_value = match c.verified {
+            true => Some(c.key.to_string()),
+            false => None,
+        };
+        let model = asset_grouping::ActiveModel {
+            asset_id: Set(id.to_vec()),
+            group_key: Set("collection".to_string()),
+            group_value: Set(group_value),
+            seq: Set(0),
+            slot_updated: Set(slot_i),
+            ..Default::default()
+        };
+        let mut query = asset_grouping::Entity::insert(model)
+            .on_conflict(
+                OnConflict::columns([
+                    asset_grouping::Column::AssetId,
+                    asset_grouping::Column::GroupKey,
+                ])
+                .update_columns([
+                    asset_grouping::Column::GroupKey,
+                    asset_grouping::Column::GroupValue,
+                    asset_grouping::Column::Seq,
+                    asset_grouping::Column::SlotUpdated,
+                ])
+                .to_owned(),
+            )
+            .build(DbBackend::Postgres);
+        query.sql = format!(
                 "{} WHERE excluded.slot_updated > asset_grouping.slot_updated AND excluded.seq >= asset_grouping.seq",
                 query.sql
             );
-            txn.execute(query)
-                .await
-                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-        }
+        txn.execute(query)
+            .await
+            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     }
 
     // check if we need to index a newer update. This assumes that all creator rows with same AssetId have the same SlotUpdated
