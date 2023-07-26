@@ -290,6 +290,7 @@ pub async fn get_by_id(
         .await?;
     let grouping: Vec<asset_grouping::Model> = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.eq(asset.id.clone()))
+        .filter(asset_grouping::Column::GroupValue.is_not_null())
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
