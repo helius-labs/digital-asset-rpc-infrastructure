@@ -37,8 +37,10 @@ where
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
-            Some(vec![0; 32]),
-            Some(seq as i64),
+            vec![0; 32],
+            Some(bs58::encode(vec![0; 32]).into_string()),
+            Some(bs58::encode(vec![0; 32]).into_string()),
+            seq as i64,
             false,
         )
         .await?;

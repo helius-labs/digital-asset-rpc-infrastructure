@@ -40,11 +40,14 @@ where
                 };
 
                 // Partial update of asset table with just leaf.
+                // TODO: Handle data/creator hash updates (in PR).
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
-                    Some(le.leaf_hash.to_vec()),
-                    Some(seq as i64),
+                    le.leaf_hash.to_vec(),
+                    None,
+                    None,
+                    seq as i64,
                     false,
                 )
                 .await?;
@@ -61,6 +64,7 @@ where
 
                 upsert_asset_with_seq(txn, id_bytes.to_vec(), seq as i64).await?;
 
+                // TODO: Handle unverificaiton.
                 if verify {
                     if let Some(Payload::SetAndVerifyCollection { collection }) =
                         parsing_result.payload

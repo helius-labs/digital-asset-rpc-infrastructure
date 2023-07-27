@@ -156,8 +156,8 @@ where
                     royalty_amount: Set(metadata.seller_fee_basis_points as i32), //basis points
                     asset_data: Set(Some(id_bytes.to_vec())),
                     slot_updated: Set(Some(slot_i)),
-                    data_hash: Set(Some(data_hash)),
-                    creator_hash: Set(Some(creator_hash)),
+                    data_hash: Set(Some(data_hash.clone())),
+                    creator_hash: Set(Some(creator_hash.clone())),
                     ..Default::default()
                 };
 
@@ -204,8 +204,10 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
-                    Some(le.leaf_hash.to_vec()),
-                    Some(seq as i64),
+                    le.leaf_hash.to_vec(),
+                    Some(data_hash),
+                    Some(creator_hash),
+                    seq as i64,
                     false,
                 )
                 .await?;

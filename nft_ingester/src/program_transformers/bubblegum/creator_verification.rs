@@ -3,14 +3,9 @@ use blockbuster::{
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
 use digital_asset_types::dao::asset_creators;
-use digital_asset_types::dao::{asset, asset_creators};
-use log::{debug, info};
-use mpl_bubblegum::{
-    hash_creators, hash_metadata,
-    state::metaplex_adapter::{Creator, MetadataArgs},
-};
+use log::debug;
+use mpl_bubblegum::{hash_creators, hash_metadata, state::metaplex_adapter::Creator};
 use sea_orm::{ConnectionTrait, Set, TransactionTrait};
-use sea_orm::{ConnectionTrait, Set, TransactionTrait, Unchanged};
 
 use crate::{
     error::IngesterError,
@@ -37,7 +32,7 @@ where
         &parsing_result.tree_update,
         &parsing_result.payload,
     ) {
-        let (creator, verify, creator_hash, data_hash, metadata) = match payload {
+        let (creator, verify, _, _, metadata) = match payload {
             Payload::CreatorVerification {
                 creator,
                 verify,
@@ -100,12 +95,14 @@ where
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
-                // Partial update of asset table with just leaf.
+                // Partial update of asset table with just leaf info.
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
-                    Some(le.leaf_hash.to_vec()),
-                    Some(seq as i64),
+                    le.leaf_hash.to_vec(),
+                    Some(updated_data_hash),
+                    Some(updated_creator_hash),
+                    seq as i64,
                     false,
                 )
                 .await?;

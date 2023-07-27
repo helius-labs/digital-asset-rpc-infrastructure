@@ -307,16 +307,12 @@ pub async fn get_by_id(
 pub async fn fetch_transactions(
     conn: &impl ConnectionTrait,
     tree: Vec<u8>,
-    leaf_id: Option<i64>,
+    leaf_id: i64,
     pagination: &Pagination,
     limit: u64,
 ) -> Result<Vec<Vec<String>>, DbErr> {
-    let mut stmt = cl_audits::Entity::find()
-        .filter(cl_audits::Column::Tree.eq(tree));
-
-    if let Some(id) = leaf_id {
-        stmt = stmt.filter(cl_audits::Column::LeafIdx.eq(id));
-    }
+    let mut stmt = cl_audits::Entity::find().filter(cl_audits::Column::Tree.eq(tree));
+    stmt = stmt.filter(cl_audits::Column::LeafIdx.eq(leaf_id));
     stmt = stmt.order_by(cl_audits::Column::CreatedAt, sea_orm::Order::Desc);
 
     stmt = paginate(pagination, limit, stmt);
@@ -364,7 +360,10 @@ pub async fn get_signatures_for_asset(
         if tree.is_empty() {
             return Err(DbErr::Custom("Empty tree for asset".to_string()));
         }
-        let transactions = fetch_transactions(conn, tree, asset.nonce, pagination, limit).await?;
+        let leaf_id = asset
+            .nonce
+            .ok_or(DbErr::RecordNotFound("Leaf ID does not exist".to_string()))?;
+        let transactions = fetch_transactions(conn, tree, leaf_id, pagination, limit).await?;
         Ok(transactions)
     } else {
         Ok(Vec::new())

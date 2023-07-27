@@ -40,8 +40,10 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
-                    Some(le.leaf_hash.to_vec()),
-                    Some(seq as i64),
+                    le.leaf_hash.to_vec(),
+                    None,
+                    None,
+                    seq as i64,
                     false,
                 )
                 .await?;

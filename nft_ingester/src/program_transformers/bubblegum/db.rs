@@ -146,24 +146,35 @@ where
 pub async fn upsert_asset_with_leaf_info<T>(
     txn: &T,
     id: Vec<u8>,
-    leaf: Option<Vec<u8>>,
-    seq: Option<i64>,
+    leaf: Vec<u8>,
+    data_hash: Option<String>,
+    creator_hash: Option<String>,
+    seq: i64,
     was_decompressed: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
-    let model = asset::ActiveModel {
+    let mut model = asset::ActiveModel {
         id: Set(id),
-        leaf: Set(leaf),
-        leaf_seq: Set(seq),
+        leaf: Set(Some(leaf)),
+        leaf_seq: Set(Some(seq)),
         ..Default::default()
     };
+    let mut columns_to_update = vec![asset::Column::Leaf, asset::Column::LeafSeq];
+    if data_hash.is_some() {
+        model.data_hash = Set(data_hash);
+        columns_to_update.push(asset::Column::DataHash)
+    }
+    if creator_hash.is_none() {
+        model.creator_hash = Set(creator_hash);
+        columns_to_update.push(asset::Column::CreatorHash)
+    }
 
     let mut query = asset::Entity::insert(model)
         .on_conflict(
             OnConflict::column(asset::Column::Id)
-                .update_columns([asset::Column::Leaf, asset::Column::LeafSeq])
+                .update_columns(columns_to_update)
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
@@ -177,6 +188,40 @@ where
         );
     }
 
+    txn.execute(query)
+        .await
+        .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
+
+    Ok(())
+}
+
+pub async fn upsert_asset_with_leaf_info_for_decompression<T>(
+    txn: &T,
+    id: Vec<u8>,
+) -> Result<(), IngesterError>
+where
+    T: ConnectionTrait + TransactionTrait,
+{
+    let model = asset::ActiveModel {
+        id: Set(id),
+        leaf: Set(None),
+        leaf_seq: Set(None),
+        data_hash: Set(None),
+        creator_hash: Set(None),
+        ..Default::default()
+    };
+    let query = asset::Entity::insert(model)
+        .on_conflict(
+            OnConflict::column(asset::Column::Id)
+                .update_columns([
+                    asset::Column::Leaf,
+                    asset::Column::LeafSeq,
+                    asset::Column::DataHash,
+                    asset::Column::CreatorHash,
+                ])
+                .to_owned(),
+        )
+        .build(DbBackend::Postgres);
     txn.execute(query)
         .await
         .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
