@@ -1,6 +1,4 @@
-use crate::program_transformers::bubblegum::{
-    upsert_asset_with_seq, upsert_collection_info, upsert_collection_verified,
-};
+use crate::program_transformers::bubblegum::{upsert_asset_with_seq, upsert_collection_info};
 use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
@@ -51,7 +49,6 @@ where
             key: collection.clone(),
             verified: verify,
         });
-
         let updated_data_hash = hash_metadata(&updated_metadata)
             .map(|e| bs58::encode(e).into_string())
             .unwrap_or("".to_string())
@@ -59,7 +56,6 @@ where
             .to_string();
 
         // Partial update of asset table with just leaf.
-        // TODO: Handle data/creator hash updates (in PR).
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
@@ -71,24 +67,22 @@ where
         )
         .await?;
 
-        // TOOD: For some reason there was an upsert of owner/delegate here. Why?
-
         upsert_asset_with_seq(txn, id_bytes.to_vec(), seq as i64).await?;
 
-        // TODO: Handle collection verification/unverification.
-        if let Some(Payload::SetAndVerifyCollection { collection }) = parsing_result.payload {
-            // Upsert into `asset_grouping` table with base collection info.
-            upsert_collection_info(
-                txn,
-                id_bytes.to_vec(),
-                collection.to_string(),
-                bundle.slot as i64,
-                seq as i64,
-            )
-            .await?;
-        }
-        // Partial update with whether collection is verified and the `seq` number.
-        upsert_collection_verified(txn, id_bytes.to_vec(), verify, seq as i64).await?;
+        // Nullify collection if it is not verified.
+        // Bubblegum will soon support removing collections.
+        let group_value = match verify {
+            true => Some(collection.to_string()),
+            false => None,
+        };
+        upsert_collection_info(
+            txn,
+            id_bytes.to_vec(),
+            group_value,
+            bundle.slot as i64,
+            seq as i64,
+        )
+        .await?;
 
         return Ok(());
     };

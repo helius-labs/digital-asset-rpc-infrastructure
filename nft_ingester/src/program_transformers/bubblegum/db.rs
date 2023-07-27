@@ -8,8 +8,6 @@ use sea_orm::{
 };
 use spl_account_compression::events::ChangeLogEventV1;
 
-use std::convert::From;
-
 pub async fn save_changelog_event<'c, T>(
     change_log_event: &ChangeLogEventV1,
     slot: u64,
@@ -314,6 +312,9 @@ where
     Ok(())
 }
 
+// TODO: I believe we can be more efficient and include this along with the other updates.
+// Also, what is seq even used for now that specific seqs?
+// Maybe we can just include this in the cl_items updates.
 pub async fn upsert_asset_with_seq<T>(txn: &T, id: Vec<u8>, seq: i64) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
@@ -428,7 +429,7 @@ where
 pub async fn upsert_collection_info<T>(
     txn: &T,
     asset_id: Vec<u8>,
-    group_value: String,
+    group_value: Option<String>,
     slot_updated: i64,
     seq: i64,
 ) -> Result<(), IngesterError>
@@ -438,7 +439,7 @@ where
     let model = asset_grouping::ActiveModel {
         asset_id: Set(asset_id),
         group_key: Set("collection".to_string()),
-        group_value: Set(Some(group_value)),
+        group_value: Set(group_value),
         slot_updated: Set(Some(slot_updated)),
         group_info_seq: Set(Some(seq)),
         ..Default::default()
@@ -461,49 +462,6 @@ where
 
     query.sql = format!(
         "{} WHERE excluded.group_info_seq > asset_grouping.group_info_seq OR asset_grouping.group_info_seq IS NULL",
-        query.sql
-    );
-
-    txn.execute(query)
-        .await
-        .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
-
-    Ok(())
-}
-
-pub async fn upsert_collection_verified<T>(
-    txn: &T,
-    asset_id: Vec<u8>,
-    verified: bool,
-    seq: i64,
-) -> Result<(), IngesterError>
-where
-    T: ConnectionTrait + TransactionTrait,
-{
-    let model = asset_grouping::ActiveModel {
-        asset_id: Set(asset_id),
-        group_key: Set("collection".to_string()),
-        verified: Set(verified),
-        seq: Set(Some(seq)),
-        ..Default::default()
-    };
-
-    let mut query = asset_grouping::Entity::insert(model)
-        .on_conflict(
-            OnConflict::columns([
-                asset_grouping::Column::AssetId,
-                asset_grouping::Column::GroupKey,
-            ])
-            .update_columns([
-                asset_grouping::Column::Verified,
-                asset_grouping::Column::Seq,
-            ])
-            .to_owned(),
-        )
-        .build(DbBackend::Postgres);
-
-    query.sql = format!(
-        "{} WHERE excluded.seq > asset_grouping.seq OR asset_grouping.seq IS NULL",
         query.sql
     );
 
