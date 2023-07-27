@@ -178,8 +178,8 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         specification_version: Set(Some(SpecificationVersions::V1)),
         specification_asset_class: Set(Some(class)),
         tree_id: Set(None),
-        nonce: Set(Some(0)),
-        seq: Set(Some(0)),
+        nonce: Set(None),
+        seq: Set(None),
         leaf: Set(None),
         compressed: Set(false),
         compressible: Set(false),
@@ -276,7 +276,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             asset_id: Set(id.to_vec()),
             group_key: Set("collection".to_string()),
             group_value: Set(group_value),
-            seq: Set(0),
+            seq: Set(None),
             slot_updated: Set(Some(slot_i)),
             ..Default::default()
         };
@@ -334,7 +334,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                     creator: Set(c.address.to_bytes().to_vec()),
                     share: Set(c.share as i32),
                     verified: Set(c.verified),
-                    seq: Set(Some(0)),
+                    seq: Set(None),
                     slot_updated: Set(Some(slot_i)),
                     position: Set(i as i16),
                     ..Default::default()
@@ -352,8 +352,17 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                         asset_creators::Column::Share,
                         asset_creators::Column::Verified,
                         asset_creators::Column::Seq,
-                    ]),
+                        asset_creators::Column::SlotUpdated,
+                    ])
+                    .to_owned(),
                 )
+                .build(DbBackend::Postgres);
+            query.sql = format!(
+                "{} WHERE excluded.slot_updated > asset_creators.slot_updated",
+                query.sql
+            );
+            txn.execute(query)
+                .await
                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }

@@ -1,13 +1,6 @@
-use std::{
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::fmt::{Display, Formatter};
 
-use figment::{
-    providers::{Env, Format, Yaml},
-    value::Value,
-    Figment,
-};
+use figment::{providers::Env, value::Value, Figment};
 use plerkle_messenger::MessengerConfig;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::Deserialize;
@@ -93,12 +86,6 @@ pub enum IngesterRole {
     Ingester,
 }
 
-impl Default for IngesterRole {
-    fn default() -> Self {
-        IngesterRole::All
-    }
-}
-
 impl Display for IngesterRole {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -118,14 +105,9 @@ pub fn rand_string() -> String {
         .collect()
 }
 
-pub fn setup_config(config_file: Option<&PathBuf>) -> IngesterConfig {
-    let mut figment = Figment::new().join(Env::prefixed("INGESTER_"));
-
-    if let Some(config_file) = config_file {
-        figment = figment.join(Yaml::file(config_file));
-    }
-
-    let mut config: IngesterConfig = figment
+pub fn setup_config() -> IngesterConfig {
+    let mut config: IngesterConfig = Figment::new()
+        .join(Env::prefixed("INGESTER_"))
         .extract()
         .map_err(|config_error| IngesterError::ConfigurationError {
             msg: format!("{}", config_error),

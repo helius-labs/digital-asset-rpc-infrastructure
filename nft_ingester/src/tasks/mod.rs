@@ -10,9 +10,7 @@ use sea_orm::{
     DeleteResult, SqlxPostgresConnector,
 };
 use serde::Deserialize;
-use serde::Deserialize;
 use sqlx::{Pool, Postgres};
-use std::time::Duration as StdDuration;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{
     sync::mpsc::{self, UnboundedSender},

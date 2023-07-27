@@ -2,7 +2,7 @@ use crate::error::IngesterError;
 use digital_asset_types::dao::{
     asset, asset_creators, asset_grouping, backfill_items, cl_audits, cl_items,
 };
-use log::{debug, info};
+use log::{debug, error, info};
 use sea_orm::{
     query::*, sea_query::OnConflict, ActiveValue::Set, ColumnTrait, DbBackend, EntityTrait,
 };
@@ -42,12 +42,13 @@ where
     for p in change_log_event.path.iter() {
         let node_idx = p.index as i64;
         debug!(
-            "seq {}, index {} level {}, node {:?}, txn {:?}, instruction {:?}",
+            "seq {}, index {} level {}, node {}, txn {}, instruction {}",
             change_log_event.seq,
             p.index,
             i,
             bs58::encode(p.node).into_string(),
             txn_id,
+            instruction
         );
         let leaf_idx = if i == 0 {
             Some(node_idx_to_leaf_idx(node_idx, depth as u32))
@@ -337,46 +338,6 @@ where
         "{} WHERE excluded.seq > asset.seq OR asset.seq IS NULL",
         query.sql
     );
-
-    txn.execute(query)
-        .await
-        .map_err(|db_err| IngesterError::StorageWriteError(db_err.to_string()))?;
-
-    Ok(())
-}
-
-// TODO: This got messed up during the merge.
-pub async fn update_creator<T>(
-    txn: &T,
-    asset_id: Vec<u8>,
-    creator: Vec<u8>,
-    seq: u64,
-    model: asset_creators::ActiveModel,
-) -> Result<(), IngesterError>
-where
-    T: ConnectionTrait + TransactionTrait,
-{
-    // Using `update_many` to avoid having to supply the primary key as well within `model`.
-    // We still effectively end up updating a single row at most, which is uniquely identified
-    // by the `(asset_id, creator)` pair. Is there any reason why we should not use
-    // `update_many` here?
-    let update = asset_creators::Entity::update_many()
-        .filter(
-            Condition::all()
-                .add(asset_creators::Column::AssetId.eq(asset_id))
-                .add(asset_creators::Column::Creator.eq(creator))
-                .add(asset_creators::Column::Seq.lte(seq)),
-        )
-        .build(DbBackend::Postgres);
-
-    // If we are indexing decompression we will update the leaf regardless of if we have previously
-    // indexed decompression and regardless of seq.
-    if !was_decompressed {
-        query.sql = format!(
-            "{} WHERE (NOT asset.was_decompressed) AND (excluded.leaf_seq > asset.leaf_seq OR asset.leaf_seq IS NULL)",
-            query.sql
-        );
-    }
 
     txn.execute(query)
         .await

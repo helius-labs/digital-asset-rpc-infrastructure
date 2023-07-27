@@ -1,8 +1,8 @@
 use crate::{
     error::IngesterError,
     program_transformers::bubblegum::{
-        upsert_asset_with_compression_info, upsert_asset_with_leaf_info,
-        upsert_asset_with_owner_and_delegate_info, upsert_asset_with_seq,
+        save_changelog_event, upsert_asset_with_compression_info, upsert_asset_with_leaf_info,
+        upsert_asset_with_owner_and_delegate_info, upsert_asset_with_seq, upsert_collection_info,
     },
     tasks::{DownloadMetadata, IntoTaskData, TaskData},
 };
@@ -339,21 +339,18 @@ where
                     .await
                     .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
-                if let Some(c) = &metadata.collection {
-                    // Upsert into `asset_grouping` table with base collection info.
-                    upsert_collection_info(
-                        txn,
-                        id_bytes.to_vec(),
-                        c.key.to_string(),
-                        slot_i,
-                        seq as i64,
-                    )
-                    .await?;
+                // Only set collection value if it is verified.
+                let group_value = match &metadata.collection {
+                    Some(c) => match c.verified {
+                        true => Some(c.key.to_string()),
+                        false => None,
+                    },
+                    None => None,
+                };
 
-                    // Partial update with whether collection is verified and the `seq` number.
-                    upsert_collection_verified(txn, id_bytes.to_vec(), c.verified, seq as i64)
-                        .await?;
-                }
+                // Upsert into `asset_grouping` table with base collection info.
+                upsert_collection_info(txn, id_bytes.to_vec(), group_value, slot_i, seq as i64)
+                    .await?;
 
                 let mut task = DownloadMetadata {
                     asset_data_id: id_bytes.to_vec(),

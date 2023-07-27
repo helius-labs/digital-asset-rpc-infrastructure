@@ -24,7 +24,6 @@ use crate::{
 };
 use cadence_macros::{is_global_default_set, statsd_count};
 use chrono::Duration;
-use clap::{arg, command, value_parser};
 use log::{error, info};
 use plerkle_messenger::{
     redis_messenger::RedisMessenger, ConsumptionType, ACCOUNT_STREAM, TRANSACTION_STREAM,
@@ -37,26 +36,10 @@ pub async fn main() -> Result<(), IngesterError> {
     init_logger();
     info!("Starting nft_ingester");
 
-    let matches = command!()
-        .arg(
-            arg!(
-                -c --config <FILE> "Sets a custom config file"
-            )
-            // We don't have syntax yet for optional options, so manually calling `required`
-            .required(false)
-            .value_parser(value_parser!(PathBuf)),
-        )
-        .get_matches();
-
-    let config_path = matches.get_one::<PathBuf>("config");
-    if let Some(config_path) = config_path {
-        println!("Loading config from: {}", config_path.display());
-    }
-
     // Setup Configuration and Metrics ---------------------------------------------
 
     // Pull Env variables into config struct
-    let config = setup_config(config_path);
+    let config = setup_config();
 
     // Optionally setup metrics if config demands it
     setup_metrics(&config);
