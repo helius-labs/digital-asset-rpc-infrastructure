@@ -22,6 +22,7 @@ pub struct GetGroupingResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
 #[serde(default)]
 pub struct AssetList {
+    pub grand_total: u64,
     pub total: u32,
     pub limit: u32,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -1,5 +1,6 @@
 use crate::dao::{
-    asset, asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
+    asset::{self, Entity},
+    asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
     GroupingSize, Pagination,
 };
 use indexmap::IndexMap;
@@ -37,7 +38,7 @@ pub async fn get_by_creator(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr> {
+) -> Result<(Vec<FullAsset>, u64), DbErr> {
     let mut condition = Condition::all()
         .add(asset_creators::Column::Creator.eq(creator))
         .add(asset::Column::Supply.gt(0));
@@ -80,7 +81,7 @@ pub async fn get_by_grouping(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr> {
+) -> Result<(Vec<FullAsset>, u64), DbErr> {
     let condition = asset_grouping::Column::GroupKey
         .eq(group_key)
         .and(asset_grouping::Column::GroupValue.eq(group_value));
@@ -105,7 +106,7 @@ pub async fn get_assets_by_owner(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr> {
+) -> Result<(Vec<FullAsset>, u64), DbErr> {
     let cond = Condition::all()
         .add(asset::Column::Owner.eq(owner))
         .add(asset::Column::Supply.gt(0));
@@ -128,7 +129,7 @@ pub async fn get_by_authority(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr> {
+) -> Result<(Vec<FullAsset>, u64), DbErr> {
     let cond = Condition::all()
         .add(asset_authority::Column::Authority.eq(authority))
         .add(asset::Column::Supply.gt(0));
@@ -152,7 +153,7 @@ async fn get_by_related_condition<E>(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr>
+) -> Result<(Vec<FullAsset>, u64), DbErr>
 where
     E: RelationTrait,
 {
@@ -162,9 +163,11 @@ where
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
+    let grand_total = get_grand_total(conn, stmt.clone()).await?;
     stmt = paginate(pagination, limit, stmt);
     let assets = stmt.all(conn).await?;
-    get_related_for_assets(conn, assets).await
+    let full_assets = get_related_for_assets(conn, assets).await?;
+    Ok((full_assets, grand_total))
 }
 
 pub async fn get_related_for_assets(
@@ -247,7 +250,7 @@ pub async fn get_assets_by_condition(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<Vec<FullAsset>, DbErr> {
+) -> Result<(Vec<FullAsset>, u64), DbErr> {
     let mut stmt = asset::Entity::find();
     for def in joins {
         stmt = stmt.join(JoinType::LeftJoin, def);
@@ -257,9 +260,11 @@ pub async fn get_assets_by_condition(
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
+    let grand_total = get_grand_total(conn, stmt.clone()).await?;
     stmt = paginate(pagination, limit, stmt);
     let assets = stmt.all(conn).await?;
-    get_related_for_assets(conn, assets).await
+    let full_assets = get_related_for_assets(conn, assets).await?;
+    Ok((full_assets, grand_total))
 }
 
 pub async fn get_by_id(
@@ -365,5 +370,16 @@ pub async fn get_signatures_for_asset(
         Ok(transactions)
     } else {
         Ok(Vec::new())
+    }
+}
+
+async fn get_grand_total(conn: &impl ConnectionTrait, stmt: Select<Entity>) -> Result<u64, DbErr> {
+    let grand_total = stmt.count(conn).await;
+    match grand_total {
+        Ok(grand_total) => Ok(grand_total),
+        Err(e) => Err(DbErr::Custom(format!(
+            "Error getting grand total: {}",
+            e.to_string()
+        ))),
     }
 }

@@ -18,7 +18,7 @@ pub async fn search_assets(
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
     let (condition, joins) = search_assets_query.conditions()?;
-    let assets = scopes::asset::get_assets_by_condition(
+    let (assets, grand_total) = scopes::asset::get_assets_by_condition(
         db,
         condition,
         joins,
@@ -28,5 +28,11 @@ pub async fn search_assets(
         limit,
     )
     .await?;
-    Ok(build_asset_response(assets, limit, &pagination, &transform))
+    Ok(build_asset_response(
+        assets,
+        limit,
+        grand_total,
+        &pagination,
+        &transform,
+    ))
 }
