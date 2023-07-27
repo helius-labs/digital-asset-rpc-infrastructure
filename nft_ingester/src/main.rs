@@ -22,9 +22,9 @@ use crate::{
     tasks::{BgTask, DownloadMetadataTask, TaskManager},
     transaction_notifications::transaction_worker,
 };
-
 use cadence_macros::{is_global_default_set, statsd_count};
 use chrono::Duration;
+use clap::{arg, command, value_parser};
 use log::{error, info};
 use plerkle_messenger::{
     redis_messenger::RedisMessenger, ConsumptionType, ACCOUNT_STREAM, TRANSACTION_STREAM,
@@ -36,15 +36,37 @@ use tokio::{signal, task::JoinSet};
 pub async fn main() -> Result<(), IngesterError> {
     init_logger();
     info!("Starting nft_ingester");
+
+    let matches = command!()
+        .arg(
+            arg!(
+                -c --config <FILE> "Sets a custom config file"
+            )
+            // We don't have syntax yet for optional options, so manually calling `required`
+            .required(false)
+            .value_parser(value_parser!(PathBuf)),
+        )
+        .get_matches();
+
+    let config_path = matches.get_one::<PathBuf>("config");
+    if let Some(config_path) = config_path {
+        println!("Loading config from: {}", config_path.display());
+    }
+
     // Setup Configuration and Metrics ---------------------------------------------
+
     // Pull Env variables into config struct
-    let config = setup_config();
+    let config = setup_config(config_path);
+
     // Optionally setup metrics if config demands it
     setup_metrics(&config);
+
     // One pool many clones, this thing is thread safe and send sync
     let database_pool = setup_database(config.clone()).await;
+
     // The role determines the processes that get run.
     let role = config.clone().role.unwrap_or(IngesterRole::All);
+
     info!("Starting Program with Role {}", role);
     // Tasks Setup -----------------------------------------------
     // This joinSet manages all the tasks that are spawned.

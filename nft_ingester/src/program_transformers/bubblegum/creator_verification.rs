@@ -1,3 +1,10 @@
+use crate::{
+    error::IngesterError,
+    program_transformers::bubblegum::{
+        save_changelog_event, upsert_asset_with_leaf_info,
+        upsert_asset_with_owner_and_delegate_info, upsert_asset_with_seq, upsert_creator_verified,
+    },
+};
 use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
@@ -123,21 +130,12 @@ where
             }
         };
 
-        // The primary key `id` is not required here since `update_creator` uses `update_many`
-        // for the time being.
-        let creator_to_update = asset_creators::ActiveModel {
-            //id: Unchanged(14),
-            verified: Set(value),
-            seq: Set(seq as i64),
-            ..Default::default()
-        };
-
-        update_creator(
+        upsert_creator_verified(
             txn,
             asset_id_bytes,
             creator.to_bytes().to_vec(),
-            seq,
-            creator_to_update,
+            value,
+            seq as i64,
         )
         .await?;
 

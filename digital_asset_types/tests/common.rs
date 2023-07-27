@@ -182,8 +182,8 @@ pub fn create_asset_creator(
             creator,
             share,
             verified,
-            seq: 0,
-            slot_updated: 0,
+            seq: Some(0),
+            slot_updated: Some(0),
             position: 0,
         },
     )
@@ -227,10 +227,12 @@ pub fn create_asset_grouping(
         asset_grouping::Model {
             asset_id,
             group_value: Some(bs58::encode(collection).into_string()),
-            seq: 0,
+            seq: Some(0),
             id: row_num,
             group_key: "collection".to_string(),
-            slot_updated: 0,
+            slot_updated: Some(0),
+            verified: false,
+            group_info_seq: Some(0),
         },
     )
 }

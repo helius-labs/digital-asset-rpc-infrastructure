@@ -65,7 +65,8 @@ pub async fn get_grouping(
         .filter(
             Condition::all()
                 .add(asset_grouping::Column::GroupKey.eq(group_key))
-                .add(asset_grouping::Column::GroupValue.eq(group_value)),
+                .add(asset_grouping::Column::GroupValue.eq(group_value))
+                .add(asset_grouping::Column::Verified.eq(true)),
         )
         .count(conn)
         .await?;
@@ -83,7 +84,8 @@ pub async fn get_by_grouping(
 ) -> Result<Vec<FullAsset>, DbErr> {
     let condition = asset_grouping::Column::GroupKey
         .eq(group_key)
-        .and(asset_grouping::Column::GroupValue.eq(group_value));
+        .and(asset_grouping::Column::GroupValue.eq(group_value))
+        .and(asset_grouping::Column::Verified.eq(true));
     get_by_related_condition(
         conn,
         Condition::all()
@@ -191,7 +193,7 @@ pub async fn get_related_for_assets(
         {
             let id = asset.id.clone();
             let fa = FullAsset {
-                asset: asset,
+                asset,
                 data: ad.clone(),
                 authorities: vec![],
                 creators: vec![],
@@ -216,6 +218,7 @@ pub async fn get_related_for_assets(
     let creators = asset_creators::Entity::find()
         .filter(asset_creators::Column::AssetId.is_in(ids.clone()))
         .order_by_asc(asset_creators::Column::AssetId)
+        .order_by_asc(asset_creators::Column::Position)
         .all(conn)
         .await?;
     for c in creators.into_iter() {
@@ -227,6 +230,7 @@ pub async fn get_related_for_assets(
     let grouping = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.is_in(ids.clone()))
         .filter(asset_grouping::Column::GroupValue.is_not_null())
+        .filter(asset_grouping::Column::Verified.eq(true))
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
@@ -292,6 +296,7 @@ pub async fn get_by_id(
     let grouping: Vec<asset_grouping::Model> = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.eq(asset.id.clone()))
         .filter(asset_grouping::Column::GroupValue.is_not_null())
+        .filter(asset_grouping::Column::Verified.eq(true))
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;

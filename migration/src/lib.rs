@@ -26,6 +26,10 @@ mod m20230613_114817_add_name_symbol_to_asset_data;
 mod m20230615_120101_remove_asset_null_constraints;
 mod m20230620_120101_add_was_decompressed;
 mod m20230623_120101_add_leaf_sequence_number;
+mod m20230712_120101_remove_asset_creators_null_constraints;
+mod m20230720_120101_add_asset_grouping_verified;
+mod m20230720_130101_remove_asset_grouping_null_constraints;
+mod m20230724_120101_add_group_info_seq;
 mod m20230726_013107_remove_not_null_constraint_from_group_value;
 
 pub struct Migrator;
@@ -61,6 +65,10 @@ impl MigratorTrait for Migrator {
             Box::new(m20230620_120101_add_was_decompressed::Migration),
             Box::new(m20230623_120101_add_leaf_sequence_number::Migration),
             Box::new(m20230726_013107_remove_not_null_constraint_from_group_value::Migration),
+            Box::new(m20230712_120101_remove_asset_creators_null_constraints::Migration),
+            Box::new(m20230720_120101_add_asset_grouping_verified::Migration),
+            Box::new(m20230720_130101_remove_asset_grouping_null_constraints::Migration),
+            Box::new(m20230724_120101_add_group_info_seq::Migration),
         ]
     }
 }

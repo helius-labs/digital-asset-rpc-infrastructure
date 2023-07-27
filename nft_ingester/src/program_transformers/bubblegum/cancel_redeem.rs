@@ -2,6 +2,7 @@ use super::{save_changelog_event, upsert_asset_with_leaf_info};
 use crate::{
     error::IngesterError,
     program_transformers::bubblegum::{
+        save_changelog_event, upsert_asset_with_leaf_info,
         upsert_asset_with_owner_and_delegate_info, upsert_asset_with_seq,
     },
 };
@@ -9,7 +10,6 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema},
 };
-use digital_asset_types::dao::asset;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
 pub async fn cancel_redeem<'c, T>(
@@ -22,7 +22,8 @@ where
     T: ConnectionTrait + TransactionTrait,
 {
     if let (Some(le), Some(cl)) = (&parsing_result.leaf_update, &parsing_result.tree_update) {
-        let seq = save_changelog_event(cl, bundle.slot, bundle.txn_id, txn, instruction).await?;
+        let seq = save_changelog_event(cl, bundle.slot, txn).await?;
+        #[allow(unreachable_patterns)]
         return match le.schema {
             LeafSchema::V1 {
                 id,
