@@ -32,26 +32,17 @@ pub async fn burn_v1_asset<T: ConnectionTrait + TransactionTrait>(
     id: FBPubkey,
     slot: u64,
 ) -> Result<(), IngesterError> {
-    let id = id.0;
-    let slot_i = slot as i64;
+    let (id, slot_i) = (id.0, slot as i64);
     let model = asset::ActiveModel {
         id: Set(id.to_vec()),
         slot_updated: Set(Some(slot_i)),
         burnt: Set(true),
         ..Default::default()
     };
-
-    let mut query = asset::Entity::insert(model)
-        .on_conflict(
-            OnConflict::columns([asset::Column::Id])
-                .update_columns([asset::Column::SlotUpdated, asset::Column::Burnt])
-                .to_owned(),
-        )
+    // If the asset hasn't been indexed yet, we don't do anything.
+    let query = asset::Entity::update(model)
+        .filter(asset::Column::SlotUpdated.lt(slot_i))
         .build(DbBackend::Postgres);
-    query.sql = format!(
-        "{} WHERE excluded.slot_updated > asset.slot_updated",
-        query.sql
-    );
     conn.execute(query).await?;
     Ok(())
 }
@@ -84,7 +75,9 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         _ => OwnerType::Single,
     };
 
-    // gets the token and token account for the mint to populate the asset. This is required when the token and token account are indexed, but not the metadata account. If the metadata account is indexed, then the token and ta ingester will update the asset with the correct data
+    // Gets the token and token account for the mint to populate the asset.
+    // This is required when the token and token account are indexed, but not the metadata account.
+    // If the metadata account is indexed, then the token and ta ingester will update the asset with the correct data.
 
     let (token, token_account): (Option<tokens::Model>, Option<token_accounts::Model>) =
         match ownership_type {
@@ -275,38 +268,40 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     if let Some(c) = &metadata.collection {
-        if c.verified {
-            let model = asset_grouping::ActiveModel {
-                asset_id: Set(id.to_vec()),
-                group_key: Set("collection".to_string()),
-                group_value: Set(c.key.to_string()),
-                seq: Set(0),
-                slot_updated: Set(slot_i),
-                ..Default::default()
-            };
-            let mut query = asset_grouping::Entity::insert(model)
-                .on_conflict(
-                    OnConflict::columns([
-                        asset_grouping::Column::AssetId,
-                        asset_grouping::Column::GroupKey,
-                    ])
-                    .update_columns([
-                        asset_grouping::Column::GroupKey,
-                        asset_grouping::Column::GroupValue,
-                        asset_grouping::Column::Seq,
-                        asset_grouping::Column::SlotUpdated,
-                    ])
-                    .to_owned(),
-                )
-                .build(DbBackend::Postgres);
-            query.sql = format!(
-                    "{} WHERE excluded.slot_updated > asset_grouping.slot_updated AND excluded.seq >= asset_grouping.seq",
-                    query.sql
-                );
-            txn.execute(query)
-                .await
-                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-        }
+        let group_value = match c.verified {
+            true => Some(c.key.to_string()),
+            false => None,
+        };
+        let model = asset_grouping::ActiveModel {
+            asset_id: Set(id.to_vec()),
+            group_key: Set("collection".to_string()),
+            group_value: Set(group_value),
+            seq: Set(0),
+            slot_updated: Set(slot_i),
+            ..Default::default()
+        };
+        let mut query = asset_grouping::Entity::insert(model)
+            .on_conflict(
+                OnConflict::columns([
+                    asset_grouping::Column::AssetId,
+                    asset_grouping::Column::GroupKey,
+                ])
+                .update_columns([
+                    asset_grouping::Column::GroupKey,
+                    asset_grouping::Column::GroupValue,
+                    asset_grouping::Column::Seq,
+                    asset_grouping::Column::SlotUpdated,
+                ])
+                .to_owned(),
+            )
+            .build(DbBackend::Postgres);
+        query.sql = format!(
+                "{} WHERE excluded.slot_updated > asset_grouping.slot_updated AND excluded.seq >= asset_grouping.seq",
+                query.sql
+            );
+        txn.execute(query)
+            .await
+            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     }
 
     // check if we need to index a newer update. This assumes that all creator rows with same AssetId have the same SlotUpdated

@@ -226,6 +226,7 @@ pub async fn get_related_for_assets(
 
     let grouping = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.is_in(ids.clone()))
+        .filter(asset_grouping::Column::GroupValue.is_not_null())
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
@@ -290,6 +291,7 @@ pub async fn get_by_id(
         .await?;
     let grouping: Vec<asset_grouping::Model> = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.eq(asset.id.clone()))
+        .filter(asset_grouping::Column::GroupValue.is_not_null())
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
@@ -329,18 +331,32 @@ pub async fn fetch_transactions(
 
 pub async fn get_signatures_for_asset(
     conn: &impl ConnectionTrait,
-    asset_id: Vec<u8>,
+    asset_id: Option<Vec<u8>>,
+    tree_id: Option<Vec<u8>>,
+    leaf_idx: Option<i64>,
     pagination: &Pagination,
     limit: u64,
 ) -> Result<Vec<Vec<String>>, DbErr> {
-    let mut stmt = asset::Entity::find().distinct_on([(asset::Entity, asset::Column::Id)]);
-    stmt = stmt
+    // if tree_id and leaf_idx are provided, use them directly to fetch transactions
+    if let (Some(tree_id), Some(leaf_idx)) = (tree_id, leaf_idx) {
+        let transactions = fetch_transactions(conn, tree_id, leaf_idx, pagination, limit).await?;
+        return Ok(transactions);
+    }
+
+    if asset_id.is_none() {
+        return Err(DbErr::Custom(
+            "Either 'id' or both 'tree' and 'leafIndex' must be provided".to_string(),
+        ));
+    }
+
+    // if only asset_id is provided, fetch the latest tree and leaf_idx (asset.nonce) for the asset
+    // and use them to fetch transactions
+    let stmt = asset::Entity::find()
+        .distinct_on([(asset::Entity, asset::Column::Id)])
         .filter(asset::Column::Id.eq(asset_id))
         .order_by(asset::Column::Id, Order::Desc)
         .limit(1);
-
     let asset = stmt.one(conn).await?;
-
     if let Some(asset) = asset {
         let tree = asset
             .tree_id

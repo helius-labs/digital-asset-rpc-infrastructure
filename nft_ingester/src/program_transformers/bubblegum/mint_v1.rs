@@ -310,7 +310,7 @@ where
                         let model = asset_grouping::ActiveModel {
                             asset_id: Set(id_bytes.to_vec()),
                             group_key: Set("collection".to_string()),
-                            group_value: Set(c.key.to_string()),
+                            group_value: Set(Some(c.key.to_string())),
                             seq: Set(seq as i64), // gummyroll seq
                             slot_updated: Set(slot_i),
                             ..Default::default()
