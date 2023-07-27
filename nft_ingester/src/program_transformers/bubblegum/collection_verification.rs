@@ -67,40 +67,6 @@ where
         };
         update_compressed_asset(txn, id_bytes.clone(), Some(seq), asset_to_update).await?;
 
-        // REMOVE: TESTING
-        let e = asset::Entity::find_by_id(id_bytes.clone())
-            .one(txn)
-            .await?
-            .unwrap();
-        let v: u8 = 1;
-        let dh = updated_data_hash.clone();
-        info!("creator hash: {}", e.creator_hash.clone().unwrap());
-        let computed_asset_hash = keccak::hashv(&[
-            &[v],
-            id_bytes.clone().as_ref(),
-            e.owner.as_ref().unwrap(),
-            e.delegate.unwrap_or(Default::default()).as_ref(),
-            cl.index.to_le_bytes().as_ref(),
-            bs58::decode(dh).into_vec().unwrap().as_ref(),
-            // hash_metadata(&metadata.clone()).unwrap().as_ref(),
-            bs58::decode(e.creator_hash.unwrap().trim())
-                .into_vec()
-                .unwrap()
-                .as_ref(),
-        ]);
-        let actual = bs58::encode(computed_asset_hash).into_string();
-        let expected = bs58::encode(le.leaf_hash).into_string();
-        info!("Computed asset hash: {}", actual);
-        if actual == expected {
-            info!("Asset hash matches leaf hash");
-        } else {
-            warn!(
-                "Asset hash does not match leaf hash, expected: {}",
-                expected
-            );
-        }
-        // END REMOVE
-
         if verify {
             let grouping = asset_grouping::ActiveModel {
                 asset_id: Set(id_bytes.clone()),
