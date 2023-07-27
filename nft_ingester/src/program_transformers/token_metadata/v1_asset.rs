@@ -277,7 +277,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             group_key: Set("collection".to_string()),
             group_value: Set(group_value),
             seq: Set(0),
-            slot_updated: Set(slot_i),
+            slot_updated: Set(Some(slot_i)),
             ..Default::default()
         };
         let mut query = asset_grouping::Entity::insert(model)
@@ -343,6 +343,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
             // ideally should have no rows after deleting, conflict logic exists solely for safety
             let mut query = asset_creators::Entity::insert_many(db_creators)
                 .on_conflict(
+                    OnConflict::columns([
                         asset_creators::Column::AssetId,
                         asset_creators::Column::Position,
                     ])
@@ -351,6 +352,8 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                         asset_creators::Column::Share,
                         asset_creators::Column::Verified,
                         asset_creators::Column::Seq,
+                    ]),
+                )
                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }
