@@ -52,7 +52,7 @@ where
             verified: verify,
         });
 
-        let updated_data_hash = hash_metadata(&updated_metadata)
+        let updated_data_hash = hash_metadata(&updated_metadata.clone())
             .map(|e| bs58::encode(e).into_string())
             .unwrap_or("".to_string())
             .trim()
@@ -72,23 +72,26 @@ where
             .one(txn)
             .await?
             .unwrap();
-        let v: u8 = 1;
-        let dh = updated_data_hash.clone();
         info!("creator hash: {}", e.creator_hash.clone().unwrap());
-        let computed_asset_hash = keccak::hashv(&[
-            &[v],
-            id_bytes.clone().as_ref(),
-            e.owner.as_ref().unwrap(),
-            e.delegate.unwrap_or(Default::default()).as_ref(),
-            cl.index.to_le_bytes().as_ref(),
-            bs58::decode(dh).into_vec().unwrap().as_ref(),
-            // hash_metadata(&metadata.clone()).unwrap().as_ref(),
-            bs58::decode(e.creator_hash.unwrap().trim())
-                .into_vec()
-                .unwrap()
-                .as_ref(),
-        ]);
-        let actual = bs58::encode(computed_asset_hash).into_string();
+
+        let id: Pubkey = le.schema.id();
+        let owner: Pubkey = Pubkey::try_from(e.owner.clone().unwrap()).unwrap();
+        let delegate: Pubkey =
+            Pubkey::try_from(e.delegate.unwrap_or(e.owner.clone().unwrap())).unwrap();
+        let nonce: u64 = cl.index as u64;
+        let data_hash: [u8; 32] = hash_metadata(&updated_metadata.clone()).unwrap();
+        let creator_hash: [u8; 32] = bs58::decode(e.creator_hash.unwrap().trim())
+            .into_vec()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        // This is how Bubblegum hashes it all together.
+        let ls = LeafSchema::new_v0(id, owner, delegate, nonce, data_hash, creator_hash);
+        let computed_leaf_hash = ls.to_node();
+
+        // let computed_asset_hash =
+        let actual = bs58::encode(computed_leaf_hash).into_string();
         let expected = bs58::encode(le.leaf_hash).into_string();
         info!("Computed asset hash: {}", actual);
         if actual == expected {
