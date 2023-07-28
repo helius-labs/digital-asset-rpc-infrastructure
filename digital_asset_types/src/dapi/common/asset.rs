@@ -49,7 +49,7 @@ pub fn file_from_str(str: String) -> File {
 pub fn build_asset_response(
     assets: Vec<FullAsset>,
     limit: u64,
-    _grand_total: Option<u64>,
+    grand_total: Option<u64>,
     pagination: &Pagination,
     transform: &AssetTransform,
 ) -> AssetList {
