@@ -168,7 +168,7 @@ where
         model.data_hash = Set(data_hash);
         columns_to_update.push(asset::Column::DataHash)
     }
-    if creator_hash.is_none() {
+    if creator_hash.is_some() {
         model.creator_hash = Set(creator_hash);
         columns_to_update.push(asset::Column::CreatorHash)
     }
