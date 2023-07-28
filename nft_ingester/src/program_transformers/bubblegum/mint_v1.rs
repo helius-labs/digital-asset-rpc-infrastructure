@@ -161,6 +161,10 @@ where
                 };
 
                 // Upsert asset table base info.
+                // TODO: Fix so it does not override.
+                // Note, to avoid issues we will need to ensure we always update the creator and data hash
+                // whenever we update leaf info (i believe), otherwise out of order updates will break things if we use the leaf seq number.
+                // But we can keep using leaf seq and it should work fine with this approach.
                 let query = asset::Entity::insert(asset_model)
                     .on_conflict(
                         OnConflict::columns([asset::Column::Id])
