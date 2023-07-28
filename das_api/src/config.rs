@@ -12,6 +12,7 @@ pub struct Config {
     pub server_port: u16,
     pub env: Option<String>,
     pub cdn_prefix: Option<String>,
+    pub grand_total_flag: Option<bool>, // export APP_GRAND_TOTAL_FLAG=true;
 }
 
 pub fn load_config() -> Result<Config, DasApiError> {

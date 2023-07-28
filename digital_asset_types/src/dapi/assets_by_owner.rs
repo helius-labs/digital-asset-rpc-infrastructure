@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use crate::dao::scopes;
 
 use crate::rpc::filter::AssetSorting;
 use crate::rpc::response::AssetList;
 use crate::rpc::transform::AssetTransform;
+
 use sea_orm::DatabaseConnection;
 use sea_orm::DbErr;
 
@@ -17,6 +20,7 @@ pub async fn get_assets_by_owner(
     before: Option<Vec<u8>>,
     after: Option<Vec<u8>>,
     transform: &AssetTransform,
+    flags: &HashMap<String, bool>,
 ) -> Result<AssetList, DbErr> {
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sort_by);
@@ -27,6 +31,7 @@ pub async fn get_assets_by_owner(
         sort_direction,
         &pagination,
         limit,
+        flags,
     )
     .await?;
     Ok(build_asset_response(

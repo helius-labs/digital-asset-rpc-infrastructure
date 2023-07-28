@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::common::{build_asset_response, create_pagination, create_sorting};
 use crate::{
     dao::{scopes, SearchAssetsQuery},
@@ -14,6 +16,7 @@ pub async fn search_assets(
     before: Option<Vec<u8>>,
     after: Option<Vec<u8>>,
     transform: &AssetTransform,
+    feature_flags: &HashMap<String, bool>,
 ) -> Result<AssetList, DbErr> {
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
@@ -26,6 +29,7 @@ pub async fn search_assets(
         sort_direction,
         &pagination,
         limit,
+        feature_flags,
     )
     .await?;
     Ok(build_asset_response(

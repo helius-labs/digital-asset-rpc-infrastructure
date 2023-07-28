@@ -6,6 +6,7 @@ use crate::dao::{
 use indexmap::IndexMap;
 use sea_orm::{entity::*, query::*, ConnectionTrait, DbErr, Order};
 use std::collections::HashMap;
+use tokio::try_join;
 
 pub fn paginate<'db, T>(pagination: &Pagination, limit: u64, stmt: T) -> T
 where
@@ -38,7 +39,8 @@ pub async fn get_by_creator(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr> {
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let mut condition = Condition::all()
         .add(asset_creators::Column::Creator.eq(creator))
         .add(asset::Column::Supply.gt(0));
@@ -53,6 +55,7 @@ pub async fn get_by_creator(
         sort_direction,
         pagination,
         limit,
+        flags,
     )
     .await
 }
@@ -81,7 +84,8 @@ pub async fn get_by_grouping(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr> {
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let condition = asset_grouping::Column::GroupKey
         .eq(group_key)
         .and(asset_grouping::Column::GroupValue.eq(group_value));
@@ -95,6 +99,7 @@ pub async fn get_by_grouping(
         sort_direction,
         pagination,
         limit,
+        flags,
     )
     .await
 }
@@ -106,7 +111,8 @@ pub async fn get_assets_by_owner(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr> {
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let cond = Condition::all()
         .add(asset::Column::Owner.eq(owner))
         .add(asset::Column::Supply.gt(0));
@@ -118,6 +124,7 @@ pub async fn get_assets_by_owner(
         sort_direction,
         pagination,
         limit,
+        flags,
     )
     .await
 }
@@ -129,7 +136,8 @@ pub async fn get_by_authority(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr> {
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let cond = Condition::all()
         .add(asset_authority::Column::Authority.eq(authority))
         .add(asset::Column::Supply.gt(0));
@@ -141,6 +149,7 @@ pub async fn get_by_authority(
         sort_direction,
         pagination,
         limit,
+        flags,
     )
     .await
 }
@@ -153,7 +162,8 @@ async fn get_by_related_condition<E>(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr>
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr>
 where
     E: RelationTrait,
 {
@@ -163,11 +173,23 @@ where
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
-    let grand_total = get_grand_total(conn, stmt.clone()).await?;
+    let flag = flags.get("grand_total_flag").unwrap_or(&false).clone();
+
+    if flag {
+        let grand_total_task = get_grand_total(conn, stmt.clone());
+
+        stmt = paginate(pagination, limit, stmt);
+        let assets_task = stmt.all(conn);
+
+        let (assets, grand_total) = try_join!(assets_task, grand_total_task)?;
+        let full_assets = get_related_for_assets(conn, assets).await?;
+        return Ok((full_assets, Some(grand_total)));
+    }
+
     stmt = paginate(pagination, limit, stmt);
     let assets = stmt.all(conn).await?;
     let full_assets = get_related_for_assets(conn, assets).await?;
-    Ok((full_assets, grand_total))
+    Ok((full_assets, None))
 }
 
 pub async fn get_related_for_assets(
@@ -250,7 +272,8 @@ pub async fn get_assets_by_condition(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-) -> Result<(Vec<FullAsset>, u64), DbErr> {
+    flags: &HashMap<String, bool>,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let mut stmt = asset::Entity::find();
     for def in joins {
         stmt = stmt.join(JoinType::LeftJoin, def);
@@ -260,11 +283,23 @@ pub async fn get_assets_by_condition(
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
-    let grand_total = get_grand_total(conn, stmt.clone()).await?;
+    let flag = flags.get("grand_total_flag").unwrap_or(&false).clone();
+
+    if flag {
+        let grand_total_task = get_grand_total(conn, stmt.clone());
+
+        stmt = paginate(pagination, limit, stmt);
+        let assets_task = stmt.all(conn);
+
+        let (assets, grand_total) = try_join!(assets_task, grand_total_task)?;
+        let full_assets = get_related_for_assets(conn, assets).await?;
+        return Ok((full_assets, Some(grand_total)));
+    }
+
     stmt = paginate(pagination, limit, stmt);
     let assets = stmt.all(conn).await?;
     let full_assets = get_related_for_assets(conn, assets).await?;
-    Ok((full_assets, grand_total))
+    Ok((full_assets, None))
 }
 
 pub async fn get_by_id(

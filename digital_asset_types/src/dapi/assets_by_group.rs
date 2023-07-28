@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::dao::scopes;
 use crate::rpc::filter::AssetSorting;
 use crate::rpc::response::AssetList;
@@ -17,6 +19,7 @@ pub async fn get_assets_by_group(
     before: Option<Vec<u8>>,
     after: Option<Vec<u8>>,
     transform: &AssetTransform,
+    flags: &HashMap<String, bool>,
 ) -> Result<AssetList, DbErr> {
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
@@ -28,6 +31,7 @@ pub async fn get_assets_by_group(
         sort_direction,
         &pagination,
         limit,
+        flags,
     )
     .await?;
     Ok(build_asset_response(

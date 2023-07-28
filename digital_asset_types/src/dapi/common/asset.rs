@@ -49,7 +49,7 @@ pub fn file_from_str(str: String) -> File {
 pub fn build_asset_response(
     assets: Vec<FullAsset>,
     limit: u64,
-    grand_total: u64,
+    grand_total: Option<u64>,
     pagination: &Pagination,
     transform: &AssetTransform,
 ) -> AssetList {
@@ -64,7 +64,7 @@ pub fn build_asset_response(
     };
     let (items, errors) = asset_list_to_rpc(assets, transform);
     AssetList {
-        grand_total,
+        grand_total: grand_total.unwrap_or(9999999), // TODO: Remove this from responses
         total,
         limit: limit as u32,
         page: page.map(|x| x as u32),
