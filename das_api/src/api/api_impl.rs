@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use digital_asset_types::{
     dao::{
         scopes::asset::get_grouping,
@@ -18,7 +16,10 @@ use digital_asset_types::{
 use open_rpc_derive::document_rpc;
 use sea_orm::{sea_query::ConditionType, ConnectionTrait, DbBackend, Statement};
 
-use crate::validation::validate_opt_pubkey;
+use crate::{
+    feature_flag::{get_feature_flags, FeatureFlags},
+    validation::validate_opt_pubkey,
+};
 use open_rpc_schema::document::OpenrpcDocument;
 use {
     crate::api::*,
@@ -36,7 +37,7 @@ use {
 pub struct DasApi {
     db_connection: DatabaseConnection,
     cdn_prefix: Option<String>,
-    flags: HashMap<String, bool>,
+    feature_flags: FeatureFlags,
 }
 
 impl DasApi {
@@ -45,12 +46,12 @@ impl DasApi {
             .max_connections(250)
             .connect(&config.database_url)
             .await?;
-        let flags = get_flags(&config);
+        let feature_flags = get_feature_flags(&config);
         let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
         Ok(DasApi {
             db_connection: conn,
             cdn_prefix: config.cdn_prefix,
-            flags,
+            feature_flags,
         })
     }
 
@@ -93,15 +94,6 @@ impl DasApi {
 
         Ok(())
     }
-}
-
-fn get_flags(config: &Config) -> HashMap<String, bool> {
-    let mut flags = HashMap::new();
-    flags.insert(
-        "grand_total_flag".to_string(),
-        config.grand_total_flag.unwrap_or(false),
-    );
-    flags
 }
 
 pub fn not_found(asset_id: &String) -> DbErr {
@@ -179,7 +171,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
-            &self.flags,
+            self.feature_flags.enable_grand_total_query,
         )
         .await
         .map_err(Into::into)
@@ -215,7 +207,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
-            &self.flags,
+            self.feature_flags.enable_grand_total_query,
         )
         .await
         .map_err(Into::into)
@@ -253,7 +245,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
-            &self.flags,
+            self.feature_flags.enable_grand_total_query,
         )
         .await
         .map_err(Into::into)
@@ -287,7 +279,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
-            &self.flags,
+            self.feature_flags.enable_grand_total_query,
         )
         .await
         .map_err(Into::into)
@@ -386,7 +378,7 @@ impl ApiContract for DasApi {
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
-            &self.flags,
+            self.feature_flags.enable_grand_total_query,
         )
         .await
         .map_err(Into::into)

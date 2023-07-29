@@ -3,6 +3,7 @@ use crate::dao::{
     asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
     GroupingSize, Pagination,
 };
+
 use indexmap::IndexMap;
 use sea_orm::{entity::*, query::*, ConnectionTrait, DbErr, Order};
 use std::collections::HashMap;
@@ -39,7 +40,7 @@ pub async fn get_by_creator(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let mut condition = Condition::all()
         .add(asset_creators::Column::Creator.eq(creator))
@@ -55,7 +56,7 @@ pub async fn get_by_creator(
         sort_direction,
         pagination,
         limit,
-        flags,
+        enable_grand_total_query,
     )
     .await
 }
@@ -84,7 +85,7 @@ pub async fn get_by_grouping(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let condition = asset_grouping::Column::GroupKey
         .eq(group_key)
@@ -99,7 +100,7 @@ pub async fn get_by_grouping(
         sort_direction,
         pagination,
         limit,
-        flags,
+        enable_grand_total_query,
     )
     .await
 }
@@ -111,7 +112,7 @@ pub async fn get_assets_by_owner(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let cond = Condition::all()
         .add(asset::Column::Owner.eq(owner))
@@ -124,7 +125,7 @@ pub async fn get_assets_by_owner(
         sort_direction,
         pagination,
         limit,
-        flags,
+        enable_grand_total_query,
     )
     .await
 }
@@ -136,7 +137,7 @@ pub async fn get_by_authority(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let cond = Condition::all()
         .add(asset_authority::Column::Authority.eq(authority))
@@ -149,7 +150,7 @@ pub async fn get_by_authority(
         sort_direction,
         pagination,
         limit,
-        flags,
+        enable_grand_total_query,
     )
     .await
 }
@@ -162,34 +163,20 @@ async fn get_by_related_condition<E>(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr>
 where
     E: RelationTrait,
 {
-    let mut stmt = asset::Entity::find()
+    let stmt = asset::Entity::find()
         .filter(condition)
         .join(JoinType::LeftJoin, relation.def())
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
-    let flag = flags.get("grand_total_flag").unwrap_or(&false).clone();
-
-    if flag {
-        let grand_total_task = get_grand_total(conn, stmt.clone());
-
-        stmt = paginate(pagination, limit, stmt);
-        let assets_task = stmt.all(conn);
-
-        let (assets, grand_total) = try_join!(assets_task, grand_total_task)?;
-        let full_assets = get_related_for_assets(conn, assets).await?;
-        return Ok((full_assets, Some(grand_total)));
-    }
-
-    stmt = paginate(pagination, limit, stmt);
-    let assets = stmt.all(conn).await?;
-    let full_assets = get_related_for_assets(conn, assets).await?;
-    Ok((full_assets, None))
+    let (assets, grand_total) =
+        get_full_response(conn, stmt, pagination, limit, enable_grand_total_query).await?;
+    Ok((assets, grand_total))
 }
 
 pub async fn get_related_for_assets(
@@ -272,7 +259,7 @@ pub async fn get_assets_by_condition(
     sort_direction: Order,
     pagination: &Pagination,
     limit: u64,
-    flags: &HashMap<String, bool>,
+    enable_grand_total_query: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
     let mut stmt = asset::Entity::find();
     for def in joins {
@@ -283,23 +270,9 @@ pub async fn get_assets_by_condition(
         .order_by(sort_by, sort_direction.clone())
         .order_by(asset::Column::Id, sort_direction);
 
-    let flag = flags.get("grand_total_flag").unwrap_or(&false).clone();
-
-    if flag {
-        let grand_total_task = get_grand_total(conn, stmt.clone());
-
-        stmt = paginate(pagination, limit, stmt);
-        let assets_task = stmt.all(conn);
-
-        let (assets, grand_total) = try_join!(assets_task, grand_total_task)?;
-        let full_assets = get_related_for_assets(conn, assets).await?;
-        return Ok((full_assets, Some(grand_total)));
-    }
-
-    stmt = paginate(pagination, limit, stmt);
-    let assets = stmt.all(conn).await?;
-    let full_assets = get_related_for_assets(conn, assets).await?;
-    Ok((full_assets, None))
+    let (assets, grand_total) =
+        get_full_response(conn, stmt, pagination, limit, enable_grand_total_query).await?;
+    Ok((assets, grand_total))
 }
 
 pub async fn get_by_id(
@@ -408,13 +381,31 @@ pub async fn get_signatures_for_asset(
     }
 }
 
-async fn get_grand_total(conn: &impl ConnectionTrait, stmt: Select<Entity>) -> Result<u64, DbErr> {
-    let grand_total = stmt.count(conn).await;
-    match grand_total {
-        Ok(grand_total) => Ok(grand_total),
-        Err(e) => Err(DbErr::Custom(format!(
-            "Error getting grand total: {}",
-            e.to_string()
-        ))),
+async fn get_full_response(
+    conn: &impl ConnectionTrait,
+    stmt: Select<Entity>,
+    pagination: &Pagination,
+    limit: u64,
+    enable_grand_total_query: bool,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
+    if enable_grand_total_query {
+        let grand_total_task = get_grand_total(conn, stmt.clone());
+        let assets_task = paginate(pagination, limit, stmt).all(conn);
+
+        let (assets, grand_total) = try_join!(assets_task, grand_total_task)?;
+        let full_assets = get_related_for_assets(conn, assets).await?;
+        return Ok((full_assets, grand_total));
+    } else {
+        let assets = paginate(pagination, limit, stmt).all(conn).await?;
+        let full_assets = get_related_for_assets(conn, assets).await?;
+        Ok((full_assets, None))
     }
+}
+
+async fn get_grand_total(
+    conn: &impl ConnectionTrait,
+    stmt: Select<Entity>,
+) -> Result<Option<u64>, DbErr> {
+    let grand_total = stmt.count(conn).await?;
+    Ok(Some(grand_total))
 }

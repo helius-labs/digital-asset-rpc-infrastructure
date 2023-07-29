@@ -64,7 +64,7 @@ pub fn build_asset_response(
     };
     let (items, errors) = asset_list_to_rpc(assets, transform);
     AssetList {
-        // grand_total: grand_total.unwrap(), // TODO: Add this back in
+        // grand_total: grand_total.unwrap(), // TODO
         total,
         limit: limit as u32,
         page: page.map(|x| x as u32),
