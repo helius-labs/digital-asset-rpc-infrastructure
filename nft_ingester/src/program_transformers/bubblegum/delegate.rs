@@ -37,11 +37,14 @@ where
                     Some(delegate.to_bytes().to_vec())
                 };
                 // Partial update of asset table with just leaf.
+                let data_hash = le.schema.data_hash();
+                let creator_hash = bs58::encode(le.schema.).into_string().trim().to_string();
+
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
                     le.leaf_hash.to_vec(),
-                    None,
+                    ,
                     None,
                     seq as i64,
                     false,

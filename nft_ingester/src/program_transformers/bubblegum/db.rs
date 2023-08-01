@@ -3,6 +3,7 @@ use digital_asset_types::dao::{
     asset, asset_creators, asset_grouping, backfill_items, cl_audits, cl_items,
 };
 use log::{debug, error, info};
+use mpl_bubblegum::state::metaplex_adapter::Collection;
 use sea_orm::{
     query::*, sea_query::OnConflict, ActiveValue::Set, ColumnTrait, DbBackend, EntityTrait,
 };
@@ -185,7 +186,7 @@ where
     // indexed decompression and regardless of seq.
     if !was_decompressed {
         query.sql = format!(
-            "{} WHERE (NOT asset.was_decompressed) AND (excluded.leaf_seq > asset.leaf_seq OR asset.leaf_seq IS NULL)",
+            "{} WHERE (NOT asset.was_decompressed) AND (excluded.leaf_seq >= asset.leaf_seq OR asset.leaf_seq IS NULL)",
             query.sql
         );
     }
@@ -261,7 +262,7 @@ where
         )
         .build(DbBackend::Postgres);
     query.sql = format!(
-            "{} WHERE excluded.owner_delegate_seq > asset.owner_delegate_seq OR asset.owner_delegate_seq IS NULL",
+            "{} WHERE excluded.owner_delegate_seq >= asset.owner_delegate_seq OR asset.owner_delegate_seq IS NULL",
             query.sql
         );
 
@@ -335,7 +336,7 @@ where
         .build(DbBackend::Postgres);
 
     query.sql = format!(
-        "{} WHERE excluded.seq > asset.seq OR asset.seq IS NULL",
+        "{} WHERE excluded.seq >= asset.seq OR asset.seq IS NULL",
         query.sql
     );
 
@@ -378,7 +379,7 @@ where
         )
         .build(DbBackend::Postgres);
 
-    query.sql = format!("{} WHERE excluded.seq > asset_creators.seq", query.sql);
+    query.sql = format!("{} WHERE excluded.seq >= asset_creators.seq", query.sql);
 
     txn.execute(query)
         .await
@@ -390,17 +391,23 @@ where
 pub async fn upsert_collection_info<T>(
     txn: &T,
     asset_id: Vec<u8>,
-    group_value: Option<String>,
+    collection: Option<Collection>,
     slot_updated: i64,
     seq: i64,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
+    let (group_value, verified) = match collection {
+        Some(c) => (Some(c.key.to_string()), c.verified),
+        None => (None, false),
+    };
+
     let model = asset_grouping::ActiveModel {
         asset_id: Set(asset_id),
         group_key: Set("collection".to_string()),
         group_value: Set(group_value),
+        verified: Set(verified),
         slot_updated: Set(Some(slot_updated)),
         group_info_seq: Set(Some(seq)),
         ..Default::default()
@@ -414,6 +421,7 @@ where
             ])
             .update_columns([
                 asset_grouping::Column::GroupValue,
+                asset_grouping::Column::Verified,
                 asset_grouping::Column::SlotUpdated,
                 asset_grouping::Column::GroupInfoSeq,
             ])
@@ -422,7 +430,7 @@ where
         .build(DbBackend::Postgres);
 
     query.sql = format!(
-        "{} WHERE excluded.group_info_seq > asset_grouping.group_info_seq OR asset_grouping.group_info_seq IS NULL",
+        "{} WHERE excluded.group_info_seq >= asset_grouping.group_info_seq OR asset_grouping.group_info_seq IS NULL",
         query.sql
     );
 

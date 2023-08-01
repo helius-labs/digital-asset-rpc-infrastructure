@@ -23,12 +23,20 @@ where
         &parsing_result.tree_update,
         &parsing_result.payload,
     ) {
-        let (collection, verify, metadata) = match payload {
+        let (collection, verify, metadata, _data_hash, creator_hash) = match payload {
             Payload::CollectionVerification {
                 collection,
                 verify,
                 args,
-            } => (collection.clone(), verify.clone(), args.clone()),
+                data_hash,
+                creator_hash,
+            } => (
+                collection.clone(),
+                verify.clone(),
+                args.clone(),
+                data_hash.clone(),
+                creator_hash.clone(),
+            ),
             _ => {
                 return Err(IngesterError::ParsingError(
                     "Ix not parsed correctly".to_string(),
@@ -54,6 +62,7 @@ where
             .unwrap_or("".to_string())
             .trim()
             .to_string();
+        let creator_hash = bs58::encode(creator_hash).into_string().trim().to_string();
 
         // Partial update of asset table with just leaf.
         upsert_asset_with_leaf_info(
@@ -61,7 +70,7 @@ where
             id_bytes.to_vec(),
             le.leaf_hash.to_vec(),
             Some(updated_data_hash),
-            None,
+            Some(creator_hash),
             seq as i64,
             false,
         )
@@ -69,16 +78,13 @@ where
 
         upsert_asset_with_seq(txn, id_bytes.to_vec(), seq as i64).await?;
 
-        // Nullify collection if it is not verified.
-        // Bubblegum will soon support removing collections.
-        let group_value = match verify {
-            true => Some(collection.to_string()),
-            false => None,
-        };
         upsert_collection_info(
             txn,
             id_bytes.to_vec(),
-            group_value,
+            Some(Collection {
+                key: collection.clone(),
+                verified: verify,
+            }),
             bundle.slot as i64,
             seq as i64,
         )

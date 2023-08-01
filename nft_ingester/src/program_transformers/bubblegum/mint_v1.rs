@@ -22,6 +22,7 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
+use log::info;
 use num_traits::FromPrimitive;
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ConnectionTrait, DbBackend, EntityTrait, JsonValue,
@@ -165,7 +166,7 @@ where
                 // Note, to avoid issues we will need to ensure we always update the creator and data hash
                 // whenever we update leaf info (i believe), otherwise out of order updates will break things if we use the leaf seq number.
                 // But we can keep using leaf seq and it should work fine with this approach.
-                let query = asset::Entity::insert(asset_model)
+                let mut query = asset::Entity::insert(asset_model)
                     .on_conflict(
                         OnConflict::columns([asset::Column::Id])
                             .update_columns([
@@ -179,14 +180,11 @@ where
                                 asset::Column::RoyaltyTarget,
                                 asset::Column::RoyaltyAmount,
                                 asset::Column::AssetData,
-                                //TODO maybe handle slot updated differently.
-                                asset::Column::SlotUpdated,
-                                asset::Column::DataHash,
-                                asset::Column::CreatorHash,
                             ])
                             .to_owned(),
                     )
                     .build(DbBackend::Postgres);
+                query.sql = format!("{} WHERE NOT asset.was_decompressed", query.sql);
                 txn.execute(query)
                     .await
                     .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
@@ -343,18 +341,15 @@ where
                     .await
                     .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
-                // Only set collection value if it is verified.
-                let group_value = match &metadata.collection {
-                    Some(c) => match c.verified {
-                        true => Some(c.key.to_string()),
-                        false => None,
-                    },
-                    None => None,
-                };
-
                 // Upsert into `asset_grouping` table with base collection info.
-                upsert_collection_info(txn, id_bytes.to_vec(), group_value, slot_i, seq as i64)
-                    .await?;
+                upsert_collection_info(
+                    txn,
+                    id_bytes.to_vec(),
+                    metadata.collection.clone(),
+                    slot_i,
+                    seq as i64,
+                )
+                .await?;
 
                 let mut task = DownloadMetadata {
                     asset_data_id: id_bytes.to_vec(),

@@ -268,14 +268,11 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     if let Some(c) = &metadata.collection {
-        let group_value = match c.verified {
-            true => Some(c.key.to_string()),
-            false => None,
-        };
         let model = asset_grouping::ActiveModel {
             asset_id: Set(id.to_vec()),
             group_key: Set("collection".to_string()),
-            group_value: Set(group_value),
+            group_value: Set(Some(c.key.to_string())),
+            verified: Set(c.verified),
             seq: Set(None),
             slot_updated: Set(Some(slot_i)),
             ..Default::default()
