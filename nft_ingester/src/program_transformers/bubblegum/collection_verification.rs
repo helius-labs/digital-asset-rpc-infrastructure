@@ -3,7 +3,7 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
-use log::debug;
+use log::{debug, info};
 use mpl_bubblegum::{hash_metadata, state::metaplex_adapter::Collection};
 use sea_orm::query::*;
 
@@ -64,13 +64,20 @@ where
             .to_string();
         let creator_hash = bs58::encode(creator_hash).into_string().trim().to_string();
 
+        let le_hash = bs58::encode(le.schema.data_hash())
+            .into_string()
+            .trim()
+            .to_string();
+        info!("Our calculated hash: {}", updated_data_hash);
+        info!("Data hash from leaf schema: {}", le_hash);
+
         // Partial update of asset table with just leaf.
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
             le.leaf_hash.to_vec(),
-            Some(updated_data_hash),
-            Some(creator_hash),
+            updated_data_hash,
+            creator_hash,
             seq as i64,
             false,
         )

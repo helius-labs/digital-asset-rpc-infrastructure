@@ -150,34 +150,32 @@ pub async fn upsert_asset_with_leaf_info<T>(
     txn: &T,
     id: Vec<u8>,
     leaf: Vec<u8>,
-    data_hash: Option<String>,
-    creator_hash: Option<String>,
+    data_hash: String,
+    creator_hash: String,
     seq: i64,
     was_decompressed: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
-    let mut model = asset::ActiveModel {
+    let model = asset::ActiveModel {
         id: Set(id),
         leaf: Set(Some(leaf)),
+        data_hash: Set(Some(data_hash)),
+        creator_hash: Set(Some(creator_hash)),
         leaf_seq: Set(Some(seq)),
         ..Default::default()
     };
-    let mut columns_to_update = vec![asset::Column::Leaf, asset::Column::LeafSeq];
-    if data_hash.is_some() {
-        model.data_hash = Set(data_hash);
-        columns_to_update.push(asset::Column::DataHash)
-    }
-    if creator_hash.is_some() {
-        model.creator_hash = Set(creator_hash);
-        columns_to_update.push(asset::Column::CreatorHash)
-    }
 
     let mut query = asset::Entity::insert(model)
         .on_conflict(
             OnConflict::column(asset::Column::Id)
-                .update_columns(columns_to_update)
+                .update_columns([
+                    asset::Column::Leaf,
+                    asset::Column::LeafSeq,
+                    asset::Column::DataHash,
+                    asset::Column::CreatorHash,
+                ])
                 .to_owned(),
         )
         .build(DbBackend::Postgres);

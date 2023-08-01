@@ -206,8 +206,8 @@ where
                     txn,
                     id_bytes.to_vec(),
                     le.leaf_hash.to_vec(),
-                    Some(data_hash),
-                    Some(creator_hash),
+                    data_hash,
+                    creator_hash,
                     seq as i64,
                     false,
                 )

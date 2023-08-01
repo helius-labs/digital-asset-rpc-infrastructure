@@ -96,8 +96,8 @@ where
                     txn,
                     id_bytes.to_vec(),
                     le.leaf_hash.to_vec(),
-                    Some(updated_data_hash),
-                    Some(updated_creator_hash),
+                    updated_data_hash,
+                    updated_creator_hash,
                     seq as i64,
                     false,
                 )
