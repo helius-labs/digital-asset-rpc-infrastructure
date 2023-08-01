@@ -150,14 +150,16 @@ pub async fn upsert_asset_with_leaf_info<T>(
     txn: &T,
     id: Vec<u8>,
     leaf: Vec<u8>,
-    data_hash: String,
-    creator_hash: String,
+    data_hash: [u8; 32],
+    creator_hash: [u8; 32],
     seq: i64,
     was_decompressed: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
+    let data_hash = bs58::encode(data_hash).into_string().trim().to_string();
+    let creator_hash = bs58::encode(creator_hash).into_string().trim().to_string();
     let model = asset::ActiveModel {
         id: Set(id),
         leaf: Set(Some(leaf)),

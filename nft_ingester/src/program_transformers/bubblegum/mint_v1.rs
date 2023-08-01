@@ -132,16 +132,7 @@ where
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
-                let data_hash = hash_metadata(args)
-                    .map(|e| bs58::encode(e).into_string())
-                    .unwrap_or("".to_string())
-                    .trim()
-                    .to_string();
-                let creator_hash = hash_creators(&args.creators)
-                    .map(|e| bs58::encode(e).into_string())
-                    .unwrap_or("".to_string())
-                    .trim()
-                    .to_string();
+
                 // Set initial mint info.
                 let asset_model = asset::ActiveModel {
                     id: Set(id_bytes.to_vec()),
@@ -156,8 +147,6 @@ where
                     royalty_amount: Set(metadata.seller_fee_basis_points as i32), //basis points
                     asset_data: Set(Some(id_bytes.to_vec())),
                     slot_updated: Set(Some(slot_i)),
-                    data_hash: Set(Some(data_hash.clone())),
-                    creator_hash: Set(Some(creator_hash.clone())),
                     ..Default::default()
                 };
 
@@ -206,8 +195,8 @@ where
                     txn,
                     id_bytes.to_vec(),
                     le.leaf_hash.to_vec(),
-                    data_hash,
-                    creator_hash,
+                    le.schema.data_hash(),
+                    le.schema.creator_hash(),
                     seq as i64,
                     false,
                 )

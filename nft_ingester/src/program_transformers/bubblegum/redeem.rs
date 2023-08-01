@@ -1,3 +1,5 @@
+use std::array;
+
 use anchor_lang::prelude::Pubkey;
 use log::debug;
 
@@ -34,13 +36,12 @@ where
         let id_bytes = asset_id.to_bytes();
 
         // Partial update of asset table with just leaf.
-        let empty_hash = bs58::encode(vec![0; 32]).into_string();
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
             vec![0; 32],
-            empty_hash.clone(),
-            empty_hash.clone(),
+            [0; 32],
+            [0; 32],
             seq as i64,
             false,
         )

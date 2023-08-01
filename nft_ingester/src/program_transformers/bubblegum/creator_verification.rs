@@ -10,7 +10,6 @@ use blockbuster::{
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
 use log::debug;
-use mpl_bubblegum::{hash_creators, hash_metadata, state::metaplex_adapter::Creator};
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
 pub async fn process<'c, T>(
@@ -28,14 +27,10 @@ where
         &parsing_result.tree_update,
         &parsing_result.payload,
     ) {
-        let (creator, verify, _, _, metadata) = match payload {
+        let (creator, verify) = match payload {
             Payload::CreatorVerification {
-                creator,
-                verify,
-                creator_hash,
-                data_hash,
-                args,
-            } => (creator, verify, creator_hash, data_hash, args),
+                creator, verify, ..
+            } => (creator, verify),
             _ => {
                 return Err(IngesterError::ParsingError(
                     "Ix not parsed correctly".to_string(),
@@ -47,35 +42,6 @@ where
             creator, verify, bundle.txn_id
         );
         let seq = save_changelog_event(cl, bundle.slot, bundle.txn_id, txn, instruction).await?;
-
-        let updated_creators = metadata
-            .creators
-            .iter()
-            .map(|c| {
-                let verified = if c.address == creator.clone() {
-                    verify.clone()
-                } else {
-                    c.verified
-                };
-                Creator {
-                    address: c.address,
-                    verified,
-                    share: c.share,
-                }
-            })
-            .collect::<Vec<Creator>>();
-        let mut updated_metadata = metadata.clone();
-        updated_metadata.creators = updated_creators;
-        let updated_data_hash = hash_metadata(&updated_metadata)
-            .map(|e| bs58::encode(e).into_string())
-            .unwrap_or("".to_string())
-            .trim()
-            .to_string();
-        let updated_creator_hash = hash_creators(&updated_metadata.creators)
-            .map(|e| bs58::encode(e).into_string())
-            .unwrap_or("".to_string())
-            .trim()
-            .to_string();
 
         let asset_id_bytes = match le.schema {
             LeafSchema::V1 {
@@ -96,8 +62,8 @@ where
                     txn,
                     id_bytes.to_vec(),
                     le.leaf_hash.to_vec(),
-                    updated_data_hash,
-                    updated_creator_hash,
+                    le.schema.data_hash(),
+                    le.schema.creator_hash(),
                     seq as i64,
                     false,
                 )

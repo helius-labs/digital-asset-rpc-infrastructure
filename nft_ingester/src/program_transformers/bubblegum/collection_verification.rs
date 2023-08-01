@@ -3,8 +3,8 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema, Payload},
 };
-use log::{debug, info};
-use mpl_bubblegum::{hash_metadata, state::metaplex_adapter::Collection};
+use log::debug;
+use mpl_bubblegum::state::metaplex_adapter::Collection;
 use sea_orm::query::*;
 
 use super::{save_changelog_event, upsert_asset_with_leaf_info};
@@ -23,20 +23,10 @@ where
         &parsing_result.tree_update,
         &parsing_result.payload,
     ) {
-        let (collection, verify, metadata, _data_hash, creator_hash) = match payload {
+        let (collection, verify) = match payload {
             Payload::CollectionVerification {
-                collection,
-                verify,
-                args,
-                data_hash,
-                creator_hash,
-            } => (
-                collection.clone(),
-                verify.clone(),
-                args.clone(),
-                data_hash.clone(),
-                creator_hash.clone(),
-            ),
+                collection, verify, ..
+            } => (collection.clone(), verify.clone()),
             _ => {
                 return Err(IngesterError::ParsingError(
                     "Ix not parsed correctly".to_string(),
@@ -52,32 +42,13 @@ where
             LeafSchema::V1 { id, .. } => id.to_bytes().to_vec(),
         };
 
-        let mut updated_metadata = metadata.clone();
-        updated_metadata.collection = Some(Collection {
-            key: collection.clone(),
-            verified: verify,
-        });
-        let updated_data_hash = hash_metadata(&updated_metadata)
-            .map(|e| bs58::encode(e).into_string())
-            .unwrap_or("".to_string())
-            .trim()
-            .to_string();
-        let creator_hash = bs58::encode(creator_hash).into_string().trim().to_string();
-
-        let le_hash = bs58::encode(le.schema.data_hash())
-            .into_string()
-            .trim()
-            .to_string();
-        info!("Our calculated hash: {}", updated_data_hash);
-        info!("Data hash from leaf schema: {}", le_hash);
-
         // Partial update of asset table with just leaf.
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
             le.leaf_hash.to_vec(),
-            updated_data_hash,
-            creator_hash,
+            le.schema.data_hash(),
+            le.schema.creator_hash(),
             seq as i64,
             false,
         )
