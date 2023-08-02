@@ -1,13 +1,13 @@
 use crate::{error::IngesterError, tasks::TaskData};
 use blockbuster::token_metadata::{
     pda::find_master_edition_account,
-    state::{Metadata, TokenStandard, UseMethod, Uses},
+    state::{CollectionDetails, Metadata, TokenStandard, UseMethod, Uses},
 };
 use chrono::Utc;
 use digital_asset_types::{
     dao::{
         asset, asset_authority, asset_creators, asset_data, asset_grouping,
-        asset_v1_account_attachments,
+        asset_v1_account_attachments, collection_metadata,
         sea_orm_active_enums::{
             ChainMutability, Mutability, OwnerType, RoyaltyTargetType, SpecificationAssetClass,
             SpecificationVersions, V1AccountAttachments,
@@ -55,6 +55,7 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
 ) -> Result<Option<TaskData>, IngesterError> {
     let metadata = metadata.clone();
     let data = metadata.data;
+    let collection_details = metadata.collection_details;
     let meta_mint_pubkey = metadata.mint;
     let (edition_attachment_address, _) = find_master_edition_account(&meta_mint_pubkey);
     let mint = metadata.mint.to_bytes().to_vec();
@@ -366,33 +367,31 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }
-    // If the CollectionDetails field is set, it means the NFT is a Collection NFT
+    // If the CollectionDetails field is set, it means this is definitely a Collection NFT
     // But if it's not set, it doesn't necessarily mean it's not a Collection NFT, bc the field was added after 1.3
-    // TODO:
-    // if let Some(collection_details) = metadata.collection_details {
-    //     match collection_details {
-    //         CollectionDetails::V1 { size: _ } => {
-    //             let model = collection_metadata::ActiveModel {
-    //                 collection_nft_pubkey: Set(metadata.mint.to_string()),
-    //                 collection_name: Set(Some(data.name.clone())),
-    //                 symbol: Set(Some(data.symbol.clone())),
-    //             };
-    //             let query = collection_metadata::Entity::insert(model)
-    //                 // .on_conflict(
-    //                 //     OnConflict::columns([collection_metadata::Column::CollectionNftPubkey])
-    //                 //         .do_nothing()
-    //                 //         .to_owned(),
-    //                 // )
-    //                 .build(DbBackend::Postgres);
-    //             txn.execute(query)
-    //                 .await
-    //                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-    //             // println!("Collection Name: {}", data.name);
-    //             // println!("Collection Symbol: {}", data.symbol);
-    //             // println!("Collection URI: {}", data.uri);
-    //         }
-    //     }
-    // }
+    // TODO: Make foreign key reference to collection_metadata table
+    if let Some(collection_details) = collection_details {
+        match collection_details {
+            CollectionDetails::V1 { size: _ } => {
+                let model = collection_metadata::ActiveModel {
+                    collection_nft_pubkey: Set(metadata.mint.to_string()),
+                    collection_name: Set(data.name.clone()),
+                    symbol: Set(data.symbol.clone()),
+                };
+                let query = collection_metadata::Entity::insert(model)
+                    // .on_conflict(
+                    //     OnConflict::columns([collection_metadata::Column::CollectionNftPubkey])
+                    //         .do_nothing()
+                    //         .to_owned(),
+                    // )
+                    .build(DbBackend::Postgres);
+
+                txn.execute(query)
+                    .await
+                    .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+            }
+        }
+    }
     txn.commit().await?;
     if uri.is_empty() {
         warn!(

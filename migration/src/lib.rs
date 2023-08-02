@@ -22,6 +22,7 @@ mod m20230525_115717_cl_audit_table;
 mod m20230528_124011_cl_audit_table_index;
 mod m20230613_114817_add_name_symbol_to_asset_data;
 mod m20230726_013107_remove_not_null_constraint_from_group_value;
+mod m20230802_225307_add_collection_metadata_table;
 
 pub struct Migrator;
 
@@ -51,6 +52,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20230528_124011_cl_audit_table_index::Migration),
             Box::new(m20230613_114817_add_name_symbol_to_asset_data::Migration),
             Box::new(m20230726_013107_remove_not_null_constraint_from_group_value::Migration),
+            Box::new(m20230802_225307_add_collection_metadata_table::Migration),
         ]
     }
 }
