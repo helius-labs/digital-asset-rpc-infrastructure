@@ -366,6 +366,33 @@ pub async fn save_v1_asset<T: ConnectionTrait + TransactionTrait>(
                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
         }
     }
+    // If the CollectionDetails field is set, it means the NFT is a Collection NFT
+    // But if it's not set, it doesn't necessarily mean it's not a Collection NFT, bc the field was added after 1.3
+    // TODO:
+    // if let Some(collection_details) = metadata.collection_details {
+    //     match collection_details {
+    //         CollectionDetails::V1 { size: _ } => {
+    //             let model = collection_metadata::ActiveModel {
+    //                 collection_nft_pubkey: Set(metadata.mint.to_string()),
+    //                 collection_name: Set(Some(data.name.clone())),
+    //                 symbol: Set(Some(data.symbol.clone())),
+    //             };
+    //             let query = collection_metadata::Entity::insert(model)
+    //                 // .on_conflict(
+    //                 //     OnConflict::columns([collection_metadata::Column::CollectionNftPubkey])
+    //                 //         .do_nothing()
+    //                 //         .to_owned(),
+    //                 // )
+    //                 .build(DbBackend::Postgres);
+    //             txn.execute(query)
+    //                 .await
+    //                 .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+    //             // println!("Collection Name: {}", data.name);
+    //             // println!("Collection Symbol: {}", data.symbol);
+    //             // println!("Collection URI: {}", data.uri);
+    //         }
+    //     }
+    // }
     txn.commit().await?;
     if uri.is_empty() {
         warn!(
