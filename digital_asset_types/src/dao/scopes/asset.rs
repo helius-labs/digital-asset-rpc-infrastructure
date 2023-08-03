@@ -4,13 +4,13 @@ use crate::{
         asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
         GroupingSize, Pagination,
     },
-    dapi::common::process_raw_fields,
+    dapi::common::safe_select,
     rpc::{response::AssetList, CollectionMetadata},
 };
 
 use indexmap::IndexMap;
 use sea_orm::{entity::*, query::*, ConnectionTrait, DbErr, Order};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::try_join;
 
 pub fn paginate<'db, T>(pagination: &Pagination, limit: u64, stmt: T) -> T
@@ -418,40 +418,39 @@ pub async fn add_collection_metadata(
     conn: &impl ConnectionTrait,
     mut asset_list: AssetList,
 ) -> Result<AssetList, DbErr> {
-    // compile a vec of all the group values (String) from the asset list
-    let mut group_values: Vec<String> = Vec::new();
+    // compile a set of all the distinct group values (bs58 String) from the asset list
+    let mut group_values: HashSet<String> = HashSet::new();
     for item in &asset_list.items {
-        if let Some(groups) = item.grouping.clone() {
+        if let Some(groups) = &item.grouping {
             for group in groups {
-                let group_value = group.group_value;
-                if let Some(group_value) = group_value {
-                    group_values.push(group_value);
+                if let Some(group_value) = &group.group_value {
+                    group_values.insert(group_value.clone());
                 }
             }
         }
     }
 
-    // convert the group values to bytea (bc asset_data.id is bytea)
+    // convert the group values to bytea by decoding them from bs58
     let bytea_group_values: Vec<Vec<u8>> = group_values
         .iter()
         .map(|group_value| {
-            let bytea_group_value = group_value.as_bytes().to_vec();
-            bytea_group_value
+            let bs58_decoded = bs58::decode(group_value).into_vec().unwrap_or_default();
+            bs58_decoded
         })
         .collect();
 
     // make a query to fetch all the metadata
     let asset_data = asset_data::Entity::find()
         .filter(asset_data::Column::Id.is_in(bytea_group_values))
+        .limit(group_values.len() as u64)
         .all(conn)
         .await?;
 
     // create a mapping of id -> collection_metadata
     let mut hashmap: HashMap<String, CollectionMetadata> = HashMap::new();
     for data in &asset_data {
-        let id = String::from_utf8_lossy(&data.id).to_string();
-        let (name, symbol) = process_raw_fields(&data.raw_name, &data.raw_symbol);
-        let collection_metadata = CollectionMetadata { name, symbol };
+        let id = bs58::encode(&data.id).into_string();
+        let collection_metadata = get_collection_metadata(&data);
         hashmap.insert(id, collection_metadata);
     }
 
@@ -472,4 +471,27 @@ pub async fn add_collection_metadata(
     }
 
     Ok(asset_list)
+}
+
+fn get_collection_metadata(data: &asset_data::Model) -> CollectionMetadata {
+    let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
+    let chain_data_selector = &mut chain_data_selector_fn;
+
+    let name = safe_select(chain_data_selector, "$.name");
+    let symbol = safe_select(chain_data_selector, "$.symbol");
+
+    let mut metadata_name = "".to_string();
+    let mut metadata_symbol = "".to_string();
+
+    if let Some(name) = name {
+        metadata_name = name.to_owned().to_string().trim_matches('"').to_string();
+    }
+    if let Some(symbol) = symbol {
+        metadata_symbol = symbol.to_owned().to_string().trim_matches('"').to_string();
+    }
+
+    CollectionMetadata {
+        name: Some(metadata_name),
+        symbol: Some(metadata_symbol),
+    }
 }

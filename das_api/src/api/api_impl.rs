@@ -313,7 +313,7 @@ impl ApiContract for DasApi {
             before,
             after,
             json_uri,
-            collection_metadata,
+            show_collection_metadata,
         } = payload;
         // Deserialize search assets query
         self.validate_pagination(&limit, &page, &before, &after)?;
@@ -380,7 +380,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
-            self.feature_flags.enable_grouping_metadata && collection_metadata.unwrap_or(false),
+            self.feature_flags.enable_collection_metadata
+                && show_collection_metadata.unwrap_or(false),
         )
         .await
         .map_err(Into::into)

@@ -153,7 +153,7 @@ pub fn safe_select<'a>(
         .and_then(|v| v.pop())
 }
 
-pub fn process_raw_fields(
+fn process_raw_fields(
     name: &Option<Vec<u8>>,
     symbol: &Option<Vec<u8>>,
 ) -> (Option<String>, Option<String>) {

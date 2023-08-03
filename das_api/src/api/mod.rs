@@ -90,7 +90,7 @@ pub struct SearchAssets {
     #[serde(default)]
     pub json_uri: Option<String>,
     #[serde(default)]
-    pub collection_metadata: Option<bool>,
+    pub show_collection_metadata: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
