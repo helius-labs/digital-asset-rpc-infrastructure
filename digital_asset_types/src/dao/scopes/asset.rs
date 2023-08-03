@@ -1,7 +1,11 @@
-use crate::dao::{
-    asset::{self, Entity},
-    asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
-    GroupingSize, Pagination,
+use crate::{
+    dao::{
+        asset::{self, Entity},
+        asset_authority, asset_creators, asset_data, asset_grouping, cl_audits, FullAsset,
+        GroupingSize, Pagination,
+    },
+    dapi::common::process_raw_fields,
+    rpc::{response::AssetList, CollectionMetadata},
 };
 
 use indexmap::IndexMap;
@@ -408,4 +412,64 @@ async fn get_grand_total(
 ) -> Result<Option<u64>, DbErr> {
     let grand_total = stmt.count(conn).await?;
     Ok(Some(grand_total))
+}
+
+pub async fn add_collection_metadata(
+    conn: &impl ConnectionTrait,
+    mut asset_list: AssetList,
+) -> Result<AssetList, DbErr> {
+    // compile a vec of all the group values (String) from the asset list
+    let mut group_values: Vec<String> = Vec::new();
+    for item in &asset_list.items {
+        if let Some(groups) = item.grouping.clone() {
+            for group in groups {
+                let group_value = group.group_value;
+                if let Some(group_value) = group_value {
+                    group_values.push(group_value);
+                }
+            }
+        }
+    }
+
+    // convert the group values to bytea (bc asset_data.id is bytea)
+    let bytea_group_values: Vec<Vec<u8>> = group_values
+        .iter()
+        .map(|group_value| {
+            let bytea_group_value = group_value.as_bytes().to_vec();
+            bytea_group_value
+        })
+        .collect();
+
+    // make a query to fetch all the metadata
+    let asset_data = asset_data::Entity::find()
+        .filter(asset_data::Column::Id.is_in(bytea_group_values))
+        .all(conn)
+        .await?;
+
+    // create a mapping of id -> collection_metadata
+    let mut hashmap: HashMap<String, CollectionMetadata> = HashMap::new();
+    for data in &asset_data {
+        let id = String::from_utf8_lossy(&data.id).to_string();
+        let (name, symbol) = process_raw_fields(&data.raw_name, &data.raw_symbol);
+        let collection_metadata = CollectionMetadata { name, symbol };
+        hashmap.insert(id, collection_metadata);
+    }
+
+    // add the metadata to the asset_list
+    for item in &mut asset_list.items {
+        if let Some(groups) = &mut item.grouping {
+            for group in groups {
+                if let Some(group_value) = &group.group_value {
+                    let collection_metadata = hashmap.get(group_value);
+                    if let Some(collection_metadata) = collection_metadata {
+                        group.group_key = group.group_key.clone();
+                        group.group_value = Some(group_value.clone());
+                        group.collection_metadata = Some(collection_metadata.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(asset_list)
 }
