@@ -211,6 +211,7 @@ pub struct Group {
 pub struct CollectionMetadata {
     pub name: Option<String>,
     pub symbol: Option<String>,
+    pub image: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]

@@ -474,24 +474,30 @@ pub async fn add_collection_metadata(
 }
 
 fn get_collection_metadata(data: &asset_data::Model) -> CollectionMetadata {
-    let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
-    let chain_data_selector = &mut chain_data_selector_fn;
+    let chain_data_selector = &mut jsonpath_lib::selector(&data.chain_data);
+    let metadata_selector = &mut jsonpath_lib::selector(&data.metadata);
 
     let name = safe_select(chain_data_selector, "$.name");
     let symbol = safe_select(chain_data_selector, "$.symbol");
+    let image = safe_select(metadata_selector, "$.image");
 
-    let mut metadata_name = "".to_string();
-    let mut metadata_symbol = "".to_string();
+    let mut col_metadata_name = "".to_string();
+    let mut col_metadata_symbol = "".to_string();
+    let mut col_metadata_image = "".to_string();
 
     if let Some(name) = name {
-        metadata_name = name.to_owned().to_string().trim_matches('"').to_string();
+        col_metadata_name = name.to_owned().to_string().trim_matches('"').to_string();
     }
     if let Some(symbol) = symbol {
-        metadata_symbol = symbol.to_owned().to_string().trim_matches('"').to_string();
+        col_metadata_symbol = symbol.to_owned().to_string().trim_matches('"').to_string();
+    }
+    if let Some(image) = image {
+        col_metadata_image = image.to_owned().to_string().trim_matches('"').to_string();
     }
 
     CollectionMetadata {
-        name: Some(metadata_name),
-        symbol: Some(metadata_symbol),
+        name: Some(col_metadata_name),
+        symbol: Some(col_metadata_symbol),
+        image: Some(col_metadata_image),
     }
 }
