@@ -68,11 +68,11 @@ impl IngesterConfig {
     }
 
     pub fn get_acc_backfill_stream_worker_count(&self) -> u32 {
-        self.account_backfill_stream_worker_count.unwrap_or(0)
+        self.account_backfill_stream_worker_count.unwrap_or(2)
     }
 
     pub fn get_txn_backfill_stream_worker_count(&self) -> u32 {
-        self.transaction_backfill_stream_worker_count.unwrap_or(0)
+        self.transaction_backfill_stream_worker_count.unwrap_or(2)
     }
 }
 
