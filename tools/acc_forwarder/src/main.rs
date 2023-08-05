@@ -80,6 +80,8 @@ impl CollectionTransactionInfo {
     }
 }
 
+const STREAM_KEY: &str = ACCOUNT_STREAM;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env::set_var(
@@ -101,9 +103,9 @@ async fn main() -> anyhow::Result<()> {
     let mut messenger = plerkle_messenger::select_messenger(messenger_config)
         .await
         .unwrap();
-    messenger.add_stream(ACCOUNT_STREAM).await.unwrap();
+    messenger.add_stream(STREAM_KEY).await.unwrap();
     messenger
-        .set_buffer_size(ACCOUNT_STREAM, 10000000000000000)
+        .set_buffer_size(STREAM_KEY, 10000000000000000)
         .await;
     let messenger = Arc::new(Mutex::new(messenger));
 
@@ -420,7 +422,7 @@ async fn send_account(
     let fbb = serialize_account(fbb, &account_info, slot, is_startup);
     let bytes = fbb.finished_data();
 
-    messenger.lock().await.send(ACCOUNT_STREAM, bytes).await?;
+    messenger.lock().await.send(STREAM_KEY, bytes).await?;
     info!("sent account {} to stream", pubkey);
 
     Ok(())

@@ -8,7 +8,7 @@ use digital_asset_types::dao::backfill_items;
 use flatbuffers::FlatBufferBuilder;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
-use plerkle_messenger::{Messenger, TRANSACTION_STREAM};
+use plerkle_messenger::{Messenger, TXN_BACKFILL};
 use plerkle_serialization::serializer::seralize_encoded_transaction_with_status;
 
 use sea_orm::{
@@ -65,6 +65,8 @@ const MAX_FAILURE_DELAY_MS: u64 = 10_000;
 const BLOCK_CACHE_SIZE: usize = 300_000;
 const MAX_CACHE_COST: i64 = 32;
 const BLOCK_CACHE_DURATION: u64 = 172800;
+
+const STREAM_KEY: &str = TXN_BACKFILL;
 
 struct SlotSeq(u64, u64);
 /// Main public entry point for backfiller task.
@@ -255,11 +257,9 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let rpc_client = RpcClient::new_with_commitment(rpc_url, rpc_commitment);
 
         // Instantiate messenger.
-        let mut messenger = T::new(config.get_messneger_client_config()).await.unwrap();
-        messenger.add_stream(TRANSACTION_STREAM).await.unwrap();
-        messenger
-            .set_buffer_size(TRANSACTION_STREAM, 10_000_000)
-            .await;
+        let mut messenger = T::new(config.get_messenger_client_config()).await.unwrap();
+        messenger.add_stream(STREAM_KEY).await.unwrap();
+        messenger.set_buffer_size(STREAM_KEY, 10_000_000).await;
 
         Self {
             db,
@@ -944,7 +944,7 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                 };
                 let builder = seralize_encoded_transaction_with_status(builder, tx_wrap)?;
                 self.messenger
-                    .send(TRANSACTION_STREAM, builder.finished_data())
+                    .send(STREAM_KEY, builder.finished_data())
                     .await?;
             }
             drop(block_ref);

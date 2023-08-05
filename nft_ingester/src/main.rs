@@ -28,7 +28,8 @@ use cadence_macros::{is_global_default_set, statsd_count};
 use chrono::Duration;
 use log::{error, info};
 use plerkle_messenger::{
-    redis_messenger::RedisMessenger, ConsumptionType, ACCOUNT_STREAM, TRANSACTION_STREAM,
+    redis_messenger::RedisMessenger, ConsumptionType, ACCOUNT_STREAM, ACC_BACKFILL,
+    TRANSACTION_STREAM, TXN_BACKFILL,
 };
 use std::time;
 use tokio::{signal, task::JoinSet};
@@ -87,6 +88,16 @@ pub async fn main() -> Result<(), IngesterError> {
         config.messenger_config.clone(),
         TRANSACTION_STREAM,
     )?;
+    let mut timer_acc_backfill = StreamSizeTimer::new(
+        stream_metrics_timer.clone(),
+        config.messenger_config.clone(),
+        ACC_BACKFILL,
+    )?;
+    let mut timer_txn_backfill = StreamSizeTimer::new(
+        stream_metrics_timer.clone(),
+        config.messenger_config.clone(),
+        TXN_BACKFILL,
+    )?;
 
     if let Some(t) = timer_acc.start::<RedisMessenger>().await {
         tasks.spawn(t);
@@ -94,15 +105,22 @@ pub async fn main() -> Result<(), IngesterError> {
     if let Some(t) = timer_txn.start::<RedisMessenger>().await {
         tasks.spawn(t);
     }
+    if let Some(t) = timer_acc_backfill.start::<RedisMessenger>().await {
+        tasks.spawn(t);
+    }
+    if let Some(t) = timer_txn_backfill.start::<RedisMessenger>().await {
+        tasks.spawn(t);
+    }
 
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
-        let (ack_task, ack_sender) =
-            ack_worker::<RedisMessenger>(config.get_messneger_client_config());
+        let (_ack_task, ack_sender) =
+            ack_worker::<RedisMessenger>(config.get_messenger_client_config());
+        // Regular Stream Workers
         for i in 0..config.get_account_stream_worker_count() {
-            let account = account_worker::<RedisMessenger>(
+            account_worker::<RedisMessenger>(
                 database_pool.clone(),
-                config.get_messneger_client_config(),
+                config.get_messenger_client_config(),
                 bg_task_sender.clone(),
                 ack_sender.clone(),
                 if i == 0 {
@@ -110,12 +128,13 @@ pub async fn main() -> Result<(), IngesterError> {
                 } else {
                     ConsumptionType::New
                 },
+                false,
             );
         }
         for i in 0..config.get_transaction_stream_worker_count() {
-            let txn = transaction_worker::<RedisMessenger>(
+            transaction_worker::<RedisMessenger>(
                 database_pool.clone(),
-                config.get_messneger_client_config(),
+                config.get_messenger_client_config(),
                 bg_task_sender.clone(),
                 ack_sender.clone(),
                 if i == 0 {
@@ -123,6 +142,36 @@ pub async fn main() -> Result<(), IngesterError> {
                 } else {
                     ConsumptionType::New
                 },
+                false,
+            );
+        }
+        // Backfill Stream Workers
+        for i in 0..config.get_acc_backfill_stream_worker_count() {
+            account_worker::<RedisMessenger>(
+                database_pool.clone(),
+                config.get_messenger_client_config(),
+                bg_task_sender.clone(),
+                ack_sender.clone(),
+                if i == 0 {
+                    ConsumptionType::Redeliver
+                } else {
+                    ConsumptionType::New
+                },
+                true,
+            );
+        }
+        for i in 0..config.get_txn_backfill_stream_worker_count() {
+            transaction_worker::<RedisMessenger>(
+                database_pool.clone(),
+                config.get_messenger_client_config(),
+                bg_task_sender.clone(),
+                ack_sender.clone(),
+                if i == 0 {
+                    ConsumptionType::Redeliver
+                } else {
+                    ConsumptionType::New
+                },
+                true,
             );
         }
     }

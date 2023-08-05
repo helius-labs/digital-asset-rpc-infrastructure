@@ -22,6 +22,8 @@ pub struct IngesterConfig {
     pub max_postgres_connections: Option<u32>,
     pub account_stream_worker_count: Option<u32>,
     pub transaction_stream_worker_count: Option<u32>,
+    pub account_backfill_stream_worker_count: Option<u32>,
+    pub transaction_backfill_stream_worker_count: Option<u32>,
     pub code_version: Option<&'static str>,
     pub ipfs_gateway: Option<String>,
     pub bg_task_config: Option<BgTaskConfig>,
@@ -50,7 +52,7 @@ impl IngesterConfig {
             .unwrap()
     }
 
-    pub fn get_messneger_client_config(&self) -> MessengerConfig {
+    pub fn get_messenger_client_config(&self) -> MessengerConfig {
         let mut mc = self.messenger_config.clone();
         mc.connection_config
             .insert("consumer_id".to_string(), Value::from(rand_string()));
@@ -63,6 +65,14 @@ impl IngesterConfig {
 
     pub fn get_transaction_stream_worker_count(&self) -> u32 {
         self.transaction_stream_worker_count.unwrap_or(2)
+    }
+
+    pub fn get_acc_backfill_stream_worker_count(&self) -> u32 {
+        self.account_backfill_stream_worker_count.unwrap_or(0)
+    }
+
+    pub fn get_txn_backfill_stream_worker_count(&self) -> u32 {
+        self.transaction_backfill_stream_worker_count.unwrap_or(0)
     }
 }
 
