@@ -9,6 +9,7 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema},
 };
+use log::info;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
 pub async fn cancel_redeem<'c, T>(
@@ -32,13 +33,13 @@ where
             } => {
                 let id_bytes = id.to_bytes();
                 let owner_bytes = owner.to_bytes().to_vec();
-                let delegate = if owner == delegate {
+                let delegate = if owner == delegate || delegate.to_bytes() == [0; 32] {
                     None
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
-                // Partial update of asset table with just leaf.
 
+                // Partial update of asset table with just leaf.
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),

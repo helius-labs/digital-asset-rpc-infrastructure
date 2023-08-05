@@ -127,7 +127,7 @@ where
                     .await
                     .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
                 // Insert into `asset` table.
-                let delegate = if owner == delegate {
+                let delegate = if owner == delegate || delegate.to_bytes() == [0; 32] {
                     None
                 } else {
                     Some(delegate.to_bytes().to_vec())

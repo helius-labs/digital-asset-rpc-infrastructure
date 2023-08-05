@@ -1,5 +1,3 @@
-use std::array;
-
 use anchor_lang::prelude::Pubkey;
 use log::debug;
 

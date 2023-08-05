@@ -212,9 +212,12 @@ where
     let model = asset::ActiveModel {
         id: Set(id),
         leaf: Set(None),
+        nonce: Set(Some(0)),
         leaf_seq: Set(None),
         data_hash: Set(None),
         creator_hash: Set(None),
+        tree_id: Set(None),
+        seq: Set(Some(0)),
         ..Default::default()
     };
     let query = asset::Entity::insert(model)
@@ -223,8 +226,11 @@ where
                 .update_columns([
                     asset::Column::Leaf,
                     asset::Column::LeafSeq,
+                    asset::Column::Nonce,
                     asset::Column::DataHash,
                     asset::Column::CreatorHash,
+                    asset::Column::TreeId,
+                    asset::Column::Seq,
                 ])
                 .to_owned(),
         )
