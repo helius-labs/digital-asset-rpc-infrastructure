@@ -42,6 +42,7 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    cl.index as i64,
                     tree_id.to_vec(),
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),

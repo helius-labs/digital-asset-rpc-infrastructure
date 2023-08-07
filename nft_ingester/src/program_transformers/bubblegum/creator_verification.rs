@@ -58,11 +58,13 @@ where
                     Some(delegate.to_bytes().to_vec())
                 };
                 let tree_id = cl.id.to_bytes();
+                let nonce = cl.index as i64;
 
                 // Partial update of asset table with just leaf info.
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    nonce,
                     tree_id.to_vec(),
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),

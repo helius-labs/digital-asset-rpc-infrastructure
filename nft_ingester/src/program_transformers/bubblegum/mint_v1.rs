@@ -160,7 +160,6 @@ where
                                 asset::Column::Frozen,
                                 asset::Column::SpecificationVersion,
                                 asset::Column::SpecificationAssetClass,
-                                asset::Column::Nonce,
                                 asset::Column::RoyaltyTargetType,
                                 asset::Column::RoyaltyTarget,
                                 asset::Column::RoyaltyAmount,
@@ -195,6 +194,7 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    nonce as i64,
                     tree_id,
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),
