@@ -8,7 +8,7 @@ use cadence_macros::{is_global_default_set, statsd_count, statsd_time};
 use chrono::Utc;
 use log::{debug, error};
 use plerkle_messenger::{
-    ConsumptionType, Messenger, MessengerConfig, RecvData, TRANSACTION_STREAM, TXN_BACKFILL,
+    ConsumptionType, Messenger, MessengerConfig, RecvData, TRANSACTION_STREAM,
 };
 use plerkle_serialization::root_as_transaction_info;
 
@@ -27,10 +27,7 @@ pub fn transaction_worker<T: Messenger>(
     consumption_type: ConsumptionType,
     pod_type: &PodType,
 ) -> JoinHandle<()> {
-    let stream_key = match pod_type {
-        PodType::Backfiller => TXN_BACKFILL,
-        PodType::Regular => TRANSACTION_STREAM,
-    };
+    let stream_key = TRANSACTION_STREAM; // TODO: send txns to TXN_BACKFILL stream on full flush (from plugin)
     tokio::spawn(async move {
         let source = T::new(config).await;
         if let Ok(mut msg) = source {
