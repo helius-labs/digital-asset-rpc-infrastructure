@@ -25,6 +25,7 @@ pub struct IngesterConfig {
     pub code_version: Option<&'static str>,
     pub ipfs_gateway: Option<String>,
     pub bg_task_config: Option<BgTaskConfig>,
+    pub pod_type: Option<PodType>,
 }
 
 impl IngesterConfig {
@@ -93,6 +94,21 @@ impl Display for IngesterRole {
             IngesterRole::Backfiller => write!(f, "Backfiller"),
             IngesterRole::BackgroundTaskRunner => write!(f, "BackgroundTaskRunner"),
             IngesterRole::Ingester => write!(f, "Ingester"),
+        }
+    }
+}
+
+#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+pub enum PodType {
+    Regular,
+    Backfiller,
+}
+
+impl Display for PodType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PodType::Regular => write!(f, "Regular"),
+            PodType::Backfiller => write!(f, "Backfiller"),
         }
     }
 }

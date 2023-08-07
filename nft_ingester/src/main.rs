@@ -14,7 +14,7 @@ use crate::{
     account_updates::account_worker,
     ack::ack_worker,
     backfiller::setup_backfiller,
-    config::{init_logger, setup_config, IngesterRole},
+    config::{init_logger, setup_config, IngesterRole, PodType},
     database::setup_database,
     error::IngesterError,
     metrics::setup_metrics,
@@ -47,6 +47,8 @@ pub async fn main() -> Result<(), IngesterError> {
     // The role determines the processes that get run.
     let role = config.clone().role.unwrap_or(IngesterRole::All);
     info!("Starting Program with Role {}", role);
+    //The pod_type determines the type of pod the ingester is running in
+    let pod_type = config.clone().pod_type.unwrap_or(PodType::Regular);
     // Tasks Setup -----------------------------------------------
     // This joinSet manages all the tasks that are spawned.
     let mut tasks = JoinSet::new();
@@ -97,10 +99,9 @@ pub async fn main() -> Result<(), IngesterError> {
 
     // Stream Consumers Setup -------------------------------------
     if role == IngesterRole::Ingester || role == IngesterRole::All {
-        let (ack_task, ack_sender) =
-            ack_worker::<RedisMessenger>(config.get_messneger_client_config());
+        let (_, ack_sender) = ack_worker::<RedisMessenger>(config.get_messneger_client_config());
         for i in 0..config.get_account_stream_worker_count() {
-            let account = account_worker::<RedisMessenger>(
+            account_worker::<RedisMessenger>(
                 database_pool.clone(),
                 config.get_messneger_client_config(),
                 bg_task_sender.clone(),
@@ -110,10 +111,11 @@ pub async fn main() -> Result<(), IngesterError> {
                 } else {
                     ConsumptionType::New
                 },
+                &pod_type,
             );
         }
         for i in 0..config.get_transaction_stream_worker_count() {
-            let txn = transaction_worker::<RedisMessenger>(
+            transaction_worker::<RedisMessenger>(
                 database_pool.clone(),
                 config.get_messneger_client_config(),
                 bg_task_sender.clone(),
@@ -123,6 +125,7 @@ pub async fn main() -> Result<(), IngesterError> {
                 } else {
                     ConsumptionType::New
                 },
+                &pod_type,
             );
         }
     }
