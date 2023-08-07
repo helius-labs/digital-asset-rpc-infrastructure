@@ -27,15 +27,10 @@ pub fn transaction_worker<T: Messenger>(
     consumption_type: ConsumptionType,
     pod_type: &PodType,
 ) -> JoinHandle<()> {
-    let stream_key: &str;
-    match pod_type {
-        PodType::Backfiller => {
-            stream_key = TXN_BACKFILL;
-        }
-        _ => {
-            stream_key = TRANSACTION_STREAM;
-        }
-    }
+    let stream_key = match pod_type {
+        PodType::Backfiller => TXN_BACKFILL,
+        PodType::Regular => TRANSACTION_STREAM,
+    };
     tokio::spawn(async move {
         let source = T::new(config).await;
         if let Ok(mut msg) = source {
