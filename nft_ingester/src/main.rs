@@ -49,6 +49,7 @@ pub async fn main() -> Result<(), IngesterError> {
     info!("Starting Program with Role {}", role);
     //The pod_type determines the type of pod the ingester is running in
     let pod_type = config.clone().pod_type.unwrap_or(PodType::Regular);
+    info!("Starting Program with Pod Type {}", pod_type);
     // Tasks Setup -----------------------------------------------
     // This joinSet manages all the tasks that are spawned.
     let mut tasks = JoinSet::new();
