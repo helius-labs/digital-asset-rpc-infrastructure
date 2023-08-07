@@ -132,13 +132,14 @@ where
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
+                let tree_id = bundle.keys.get(3).unwrap().0.to_vec();
 
                 // Set initial mint info.
                 let asset_model = asset::ActiveModel {
                     id: Set(id_bytes.to_vec()),
                     owner_type: Set(OwnerType::Single),
                     frozen: Set(false),
-                    tree_id: Set(Some(bundle.keys.get(3).unwrap().0.to_vec())),
+                    tree_id: Set(Some(tree_id.clone())),
                     specification_version: Set(Some(SpecificationVersions::V1)),
                     specification_asset_class: Set(Some(SpecificationAssetClass::Nft)),
                     nonce: Set(Some(nonce as i64)),
@@ -151,17 +152,12 @@ where
                 };
 
                 // Upsert asset table base info.
-                // TODO: Fix so it does not override.
-                // Note, to avoid issues we will need to ensure we always update the creator and data hash
-                // whenever we update leaf info (i believe), otherwise out of order updates will break things if we use the leaf seq number.
-                // But we can keep using leaf seq and it should work fine with this approach.
                 let mut query = asset::Entity::insert(asset_model)
                     .on_conflict(
                         OnConflict::columns([asset::Column::Id])
                             .update_columns([
                                 asset::Column::OwnerType,
                                 asset::Column::Frozen,
-                                asset::Column::TreeId,
                                 asset::Column::SpecificationVersion,
                                 asset::Column::SpecificationAssetClass,
                                 asset::Column::Nonce,
@@ -173,7 +169,12 @@ where
                             .to_owned(),
                     )
                     .build(DbBackend::Postgres);
-                query.sql = format!("{} WHERE NOT asset.was_decompressed", query.sql);
+
+                // Do not overwrite changes that happened after the asset was decompressed.
+                query.sql = format!(
+                    "{} WHERE excluded.slot_updated > asset.slot_updated OR asset.slot_updated IS NULL",
+                    query.sql
+                );
                 txn.execute(query)
                     .await
                     .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
@@ -194,6 +195,7 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    tree_id,
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),
                     le.schema.creator_hash(),

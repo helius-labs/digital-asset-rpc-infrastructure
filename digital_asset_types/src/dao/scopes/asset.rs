@@ -284,16 +284,25 @@ pub async fn get_by_id(
     asset_id: Vec<u8>,
     include_no_supply: bool,
 ) -> Result<FullAsset, DbErr> {
-    let mut asset_data = asset::Entity::find_by_id(asset_id).find_also_related(asset_data::Entity);
+    let mut asset_data =
+        asset::Entity::find_by_id(asset_id.clone()).find_also_related(asset_data::Entity);
     if !include_no_supply {
         asset_data = asset_data.filter(Condition::all().add(asset::Column::Supply.gt(0)));
     }
-
     let asset_data: (asset::Model, asset_data::Model) =
         asset_data.one(conn).await.and_then(|o| match o {
             Some((a, Some(d))) => Ok((a, d)),
-            _ => Err(DbErr::RecordNotFound("Asset Not Found".to_string())),
+            _ => {
+                println!(
+                    "a: {:?}, d {:?}",
+                    o.clone().map(|(a, _)| a),
+                    o.map(|(_, d)| d)
+                );
+                Err(DbErr::RecordNotFound("Asset Not Found".to_string()))
+            }
         })?;
+
+    println!("asset found: {:?}", asset_data.0.id);
 
     let (asset, data) = asset_data;
     let authorities: Vec<asset_authority::Model> = asset_authority::Entity::find()

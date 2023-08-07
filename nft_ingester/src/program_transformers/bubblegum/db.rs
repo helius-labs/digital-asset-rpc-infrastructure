@@ -153,6 +153,7 @@ where
 pub async fn upsert_asset_with_leaf_info<T>(
     txn: &T,
     id: Vec<u8>,
+    tree_id: Vec<u8>,
     leaf: Vec<u8>,
     data_hash: [u8; 32],
     creator_hash: [u8; 32],
@@ -166,6 +167,7 @@ where
     let creator_hash = bs58::encode(creator_hash).into_string().trim().to_string();
     let model = asset::ActiveModel {
         id: Set(id),
+        tree_id: Set(Some(tree_id)),
         leaf: Set(Some(leaf)),
         data_hash: Set(Some(data_hash)),
         creator_hash: Set(Some(creator_hash)),
@@ -177,6 +179,7 @@ where
         .on_conflict(
             OnConflict::column(asset::Column::Id)
                 .update_columns([
+                    asset::Column::TreeId,
                     asset::Column::Leaf,
                     asset::Column::LeafSeq,
                     asset::Column::DataHash,
@@ -272,7 +275,7 @@ where
         )
         .build(DbBackend::Postgres);
     query.sql = format!(
-            "{} WHERE excluded.owner_delegate_seq >= asset.owner_delegate_seq OR asset.owner_delegate_seq IS NULL",
+            "{} WHERE (excluded.owner_delegate_seq >= asset.owner_delegate_seq OR asset.owner_delegate_seq IS NULL) AND (excluded.slot_updated > asset.slot_updated OR asset.slot_updated IS NULL)",
             query.sql
         );
 
@@ -346,7 +349,7 @@ where
         .build(DbBackend::Postgres);
 
     query.sql = format!(
-        "{} WHERE excluded.seq >= asset.seq OR asset.seq IS NULL",
+        "{} WHERE (NOT asset.was_decompressed) AND (excluded.seq >= asset.seq OR asset.seq IS NULL)",
         query.sql
     );
 
@@ -389,7 +392,10 @@ where
         )
         .build(DbBackend::Postgres);
 
-    query.sql = format!("{} WHERE excluded.seq >= asset_creators.seq", query.sql);
+    query.sql = format!(
+        "{} WHERE (NOT asset.was_decompressed) AND excluded.seq >= asset_creators.seq AND (excluded.slot_updated >= asset.slot_updated OR asset.slot_updated IS NULL)",
+        query.sql
+    );
 
     txn.execute(query)
         .await
@@ -440,7 +446,7 @@ where
         .build(DbBackend::Postgres);
 
     query.sql = format!(
-        "{} WHERE excluded.group_info_seq >= asset_grouping.group_info_seq OR asset_grouping.group_info_seq IS NULL",
+        "{} WHERE (excluded.group_info_seq >= asset_grouping.group_info_seq OR asset_grouping.group_info_seq IS NULL) AND (excluded.slot_updated >= asset.slot_updated OR asset.slot_updated IS NULL)",
         query.sql
     );
 

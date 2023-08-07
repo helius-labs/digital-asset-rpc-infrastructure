@@ -32,11 +32,13 @@ where
         );
         debug!("Indexing redeem for asset id: {:?}", asset_id);
         let id_bytes = asset_id.to_bytes();
+        let tree_id = cl.id.to_bytes();
 
         // Partial update of asset table with just leaf.
         upsert_asset_with_leaf_info(
             txn,
             id_bytes.to_vec(),
+            tree_id.to_vec(),
             vec![0; 32],
             [0; 32],
             [0; 32],

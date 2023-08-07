@@ -36,10 +36,13 @@ where
                 } else {
                     Some(delegate.to_bytes().to_vec())
                 };
+                let tree_id = cl.id.to_bytes();
+
                 // Partial update of asset table with just leaf.
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    tree_id.to_vec(),
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),
                     le.schema.creator_hash(),

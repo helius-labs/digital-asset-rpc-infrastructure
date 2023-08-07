@@ -9,7 +9,6 @@ use blockbuster::{
     instruction::InstructionBundle,
     programs::bubblegum::{BubblegumInstruction, LeafSchema},
 };
-use log::info;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
 pub async fn cancel_redeem<'c, T>(
@@ -22,6 +21,7 @@ where
     T: ConnectionTrait + TransactionTrait,
 {
     if let (Some(le), Some(cl)) = (&parsing_result.leaf_update, &parsing_result.tree_update) {
+        let tree_id = cl.id.to_bytes();
         let seq = save_changelog_event(cl, bundle.slot, bundle.txn_id, txn, instruction).await?;
         #[allow(unreachable_patterns)]
         return match le.schema {
@@ -43,6 +43,7 @@ where
                 upsert_asset_with_leaf_info(
                     txn,
                     id_bytes.to_vec(),
+                    tree_id.to_vec(),
                     le.leaf_hash.to_vec(),
                     le.schema.data_hash(),
                     le.schema.creator_hash(),
