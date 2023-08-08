@@ -10,7 +10,11 @@ use digital_asset_types::{
         get_asset, get_assets_by_authority, get_assets_by_creator, get_assets_by_group,
         get_assets_by_owner, get_proof_for_asset, get_signatures_for_asset, search_assets,
     },
-    rpc::{filter::SearchConditionType, response::GetGroupingResponse, transform::AssetTransform},
+    rpc::{
+        filter::{AssetSortBy, SearchConditionType},
+        response::GetGroupingResponse,
+        transform::AssetTransform,
+    },
     rpc::{OwnershipModel, RoyaltyModel},
 };
 use open_rpc_derive::document_rpc;
@@ -100,7 +104,7 @@ impl DasApi {
         group: &String,
         collection: &String,
         sort_by: &Option<AssetSorting>,
-    ) -> Result<Option<AssetSorting>, DasApiError> {
+    ) -> Result<&Option<AssetSorting>, DasApiError> {
         // List of collections which contain more than 100k nfts
         let collections: [&str; 35] = [
             "2bJpbZ5VNp48LpTh2DSwiuo6gJsTrh59TjcsAfRCLNXZ",
@@ -141,15 +145,15 @@ impl DasApi {
         ];
 
         if group == "collection" && collections.contains(&collection.as_str()) {
-            if sort_by.is_some() {
-                return Err(DasApiError::ValidationError(
-                    "Sorting is not allowed for the specified collection".to_string(),
-                ));
+            if sort_by.unwrap_or_default().sort_by == AssetSortBy::None {
+                return Ok(sort_by);
             } else {
-                return Ok(None);
+                return Err(DasApiError::ValidationError(
+                    format!("Sorting is not supported for collection {}. Please include `\"sortBy\": {{ sortBy: \"None\" }}` in your request to disable sorting.", collection),
+                ));
             }
         }
-        Ok(Some(sort_by.clone().unwrap_or_default()))
+        Ok(sort_by)
     }
 }
 
@@ -248,8 +252,9 @@ impl ApiContract for DasApi {
             after,
         } = payload;
 
+        println!("{:?}", sort_by);
+        println!("{:?}", group_value);
         let sort_by = self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
-
         let before: Option<String> = before.filter(|before| !before.is_empty());
         let after: Option<String> = after.filter(|after| !after.is_empty());
         self.validate_pagination(&limit, &page, &before, &after)?;
@@ -260,7 +265,7 @@ impl ApiContract for DasApi {
             &self.db_connection,
             group_key,
             group_value,
-            sort_by,
+            sort_by.clone().unwrap_or_default(),
             limit.map(|x| x as u64).unwrap_or(1000),
             page.map(|x| x as u64),
             before.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),

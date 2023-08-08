@@ -99,34 +99,18 @@ pub fn build_transaction_signatures_response(
     }
 }
 
-pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, asset::Column) {
+pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, Option<asset::Column>) {
     let sort_column = match sorting.sort_by {
-        AssetSortBy::Created => asset::Column::CreatedAt,
-        AssetSortBy::Updated => asset::Column::SlotUpdated,
-        AssetSortBy::RecentAction => asset::Column::SlotUpdated,
+        AssetSortBy::Created => Some(asset::Column::CreatedAt),
+        AssetSortBy::Updated => Some(asset::Column::SlotUpdated),
+        AssetSortBy::RecentAction => Some(asset::Column::SlotUpdated),
+        AssetSortBy::None => None,
     };
-    let sort_direction = match sorting.sort_direction {
+    let sort_direction = match sorting.sort_direction.unwrap_or_default() {
         AssetSortDirection::Desc => sea_orm::query::Order::Desc,
         AssetSortDirection::Asc => sea_orm::query::Order::Asc,
     };
     (sort_direction, sort_column)
-}
-
-pub fn create_optional_sorting(
-    sorting: Option<AssetSorting>,
-) -> Option<(sea_orm::query::Order, asset::Column)> {
-    sorting.map(|sort| {
-        let sort_column = match sort.sort_by {
-            AssetSortBy::Created => asset::Column::CreatedAt,
-            AssetSortBy::Updated => asset::Column::SlotUpdated,
-            AssetSortBy::RecentAction => asset::Column::SlotUpdated,
-        };
-        let sort_direction = match sort.sort_direction {
-            AssetSortDirection::Desc => sea_orm::query::Order::Desc,
-            AssetSortDirection::Asc => sea_orm::query::Order::Asc,
-        };
-        (sort_direction, sort_column)
-    })
 }
 
 pub fn create_pagination(
