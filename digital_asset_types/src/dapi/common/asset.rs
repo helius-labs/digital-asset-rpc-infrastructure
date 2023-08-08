@@ -112,6 +112,23 @@ pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, asset::C
     (sort_direction, sort_column)
 }
 
+pub fn create_optional_sorting(
+    sorting: Option<AssetSorting>,
+) -> Option<(sea_orm::query::Order, asset::Column)> {
+    sorting.map(|sort| {
+        let sort_column = match sort.sort_by {
+            AssetSortBy::Created => asset::Column::CreatedAt,
+            AssetSortBy::Updated => asset::Column::SlotUpdated,
+            AssetSortBy::RecentAction => asset::Column::SlotUpdated,
+        };
+        let sort_direction = match sort.sort_direction {
+            AssetSortDirection::Desc => sea_orm::query::Order::Desc,
+            AssetSortDirection::Asc => sea_orm::query::Order::Asc,
+        };
+        (sort_direction, sort_column)
+    })
+}
+
 pub fn create_pagination(
     before: Option<Vec<u8>>,
     after: Option<Vec<u8>>,

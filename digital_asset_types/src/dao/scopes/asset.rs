@@ -109,6 +109,30 @@ pub async fn get_by_grouping(
     .await
 }
 
+pub async fn get_by_grouping_unsorted(
+    conn: &impl ConnectionTrait,
+    group_key: String,
+    group_value: String,
+    pagination: &Pagination,
+    limit: u64,
+    enable_grand_total_query: bool,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
+    let condition = asset_grouping::Column::GroupKey
+        .eq(group_key)
+        .and(asset_grouping::Column::GroupValue.eq(group_value));
+    get_by_related_condition_unsorted(
+        conn,
+        Condition::all()
+            .add(condition)
+            .add(asset::Column::Supply.gt(0)),
+        asset::Relation::AssetGrouping,
+        pagination,
+        limit,
+        enable_grand_total_query,
+    )
+    .await
+}
+
 pub async fn get_assets_by_owner(
     conn: &impl ConnectionTrait,
     owner: Vec<u8>,
@@ -157,6 +181,26 @@ pub async fn get_by_authority(
         enable_grand_total_query,
     )
     .await
+}
+
+async fn get_by_related_condition_unsorted<E>(
+    conn: &impl ConnectionTrait,
+    condition: Condition,
+    relation: E,
+    pagination: &Pagination,
+    limit: u64,
+    enable_grand_total_query: bool,
+) -> Result<(Vec<FullAsset>, Option<u64>), DbErr>
+where
+    E: RelationTrait,
+{
+    let stmt = asset::Entity::find()
+        .filter(condition)
+        .join(JoinType::LeftJoin, relation.def());
+
+    let (assets, grand_total) =
+        get_full_response(conn, stmt, pagination, limit, enable_grand_total_query).await?;
+    Ok((assets, grand_total))
 }
 
 async fn get_by_related_condition<E>(

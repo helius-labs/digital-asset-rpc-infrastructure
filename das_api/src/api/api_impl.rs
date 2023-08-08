@@ -100,7 +100,7 @@ impl DasApi {
         group: &String,
         collection: &String,
         sort_by: &Option<AssetSorting>,
-    ) -> Result<(), DasApiError> {
+    ) -> Result<Option<AssetSorting>, DasApiError> {
         // List of collections which contain more than 100k nfts
         let collections: [&str; 35] = [
             "2bJpbZ5VNp48LpTh2DSwiuo6gJsTrh59TjcsAfRCLNXZ",
@@ -140,13 +140,16 @@ impl DasApi {
             "tinyVrmxcEUyVufgmFzGYe7C4mrGXDC21uLJAGVKXkg",
         ];
 
-        if group == "collection" && sort_by.is_some() && collections.contains(&collection.as_str())
-        {
-            return Err(DasApiError::ValidationError(
-                "Sorting is not allowed for the specified collection".to_string(),
-            ));
+        if group == "collection" && collections.contains(&collection.as_str()) {
+            if sort_by.is_some() {
+                return Err(DasApiError::ValidationError(
+                    "Sorting is not allowed for the specified collection".to_string(),
+                ));
+            } else {
+                return Ok(None);
+            }
         }
-        Ok(())
+        Ok(Some(sort_by.clone().unwrap_or_default()))
     }
 }
 
@@ -245,11 +248,10 @@ impl ApiContract for DasApi {
             after,
         } = payload;
 
-        self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
+        let sort_by = self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
 
         let before: Option<String> = before.filter(|before| !before.is_empty());
         let after: Option<String> = after.filter(|after| !after.is_empty());
-        let sort_by = sort_by.unwrap_or_default();
         self.validate_pagination(&limit, &page, &before, &after)?;
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
