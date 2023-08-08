@@ -14,6 +14,7 @@ use {
     crate::error::DasApiError,
     cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient},
     cadence_macros::set_global_default,
+    std::env,
     std::net::SocketAddr,
     std::net::UdpSocket,
 };
@@ -115,6 +116,11 @@ impl Logger for MetricMiddleware {
 
 #[tokio::main]
 async fn main() -> Result<(), DasApiError> {
+    env::set_var(
+        env_logger::DEFAULT_FILTER_ENV,
+        env::var_os(env_logger::DEFAULT_FILTER_ENV).unwrap_or_else(|| "info,sqlx=debug".into()),
+    );
+    env_logger::init();
     let config = load_config()?;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server_port));
     let cors = CorsLayer::new()
