@@ -4,7 +4,7 @@ use crate::{
         scopes::{self, asset::add_collection_metadata},
         SearchAssetsQuery,
     },
-    rpc::{filter::AssetSorting, response::AssetList, transform::AssetTransform},
+    rpc::{filter::AssetSorting, response::AssetList, transform::AssetTransform, DisplayOptions},
 };
 use sea_orm::{DatabaseConnection, DbErr};
 
@@ -19,6 +19,7 @@ pub async fn search_assets(
     transform: &AssetTransform,
     enable_grand_total_query: bool,
     enable_collection_metadata: bool,
+    display_options: Option<DisplayOptions>,
 ) -> Result<AssetList, DbErr> {
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
@@ -35,8 +36,12 @@ pub async fn search_assets(
     )
     .await?;
     let mut asset_list = build_asset_response(assets, limit, grand_total, &pagination, &transform);
-    if enable_collection_metadata {
-        asset_list = add_collection_metadata(db, asset_list).await?;
+
+    if let Some(display_options) = display_options {
+        if display_options.show_collection_metadata && enable_collection_metadata {
+            asset_list = add_collection_metadata(db, asset_list).await?;
+        }
     }
+
     Ok(asset_list)
 }

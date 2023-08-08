@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use digital_asset_types::rpc::filter::SearchConditionType;
 use digital_asset_types::rpc::response::{AssetList, TransactionSignatureList};
 use digital_asset_types::rpc::{filter::AssetSorting, response::GetGroupingResponse};
-use digital_asset_types::rpc::{Asset, AssetProof, Interface, OwnershipModel, RoyaltyModel};
+use digital_asset_types::rpc::{
+    Asset, AssetProof, DisplayOptions, Interface, OwnershipModel, RoyaltyModel,
+};
 use open_rpc_derive::{document_rpc, rpc};
 use open_rpc_schema::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -90,7 +92,7 @@ pub struct SearchAssets {
     #[serde(default)]
     pub json_uri: Option<String>,
     #[serde(default)]
-    pub show_collection_metadata: Option<bool>,
+    pub display_options: Option<DisplayOptions>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
