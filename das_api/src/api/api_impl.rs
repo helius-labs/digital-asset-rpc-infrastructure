@@ -170,6 +170,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
+            display_options,
         } = payload;
         let before: Option<String> = before.filter(|before| !before.is_empty());
         let after: Option<String> = after.filter(|after| !after.is_empty());
@@ -190,6 +191,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
+            self.feature_flags.enable_collection_metadata,
+            display_options,
         )
         .await
         .map_err(Into::into)
@@ -207,6 +210,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
+            display_options,
         } = payload;
 
         self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
@@ -229,6 +233,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
+            self.feature_flags.enable_collection_metadata,
+            display_options,
         )
         .await
         .map_err(Into::into)
@@ -246,6 +252,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
+            display_options,
         } = payload;
         let creator_address = validate_pubkey(creator_address.clone())?;
         let creator_address_bytes = creator_address.to_bytes().to_vec();
@@ -267,6 +274,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
+            self.feature_flags.enable_collection_metadata,
+            display_options,
         )
         .await
         .map_err(Into::into)
@@ -283,6 +292,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
+            display_options,
         } = payload;
         let sort_by = sort_by.unwrap_or_default();
         let authority_address = validate_pubkey(authority_address.clone())?;
@@ -301,6 +311,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
+            self.feature_flags.enable_collection_metadata,
+            display_options,
         )
         .await
         .map_err(Into::into)

@@ -379,4 +379,6 @@ pub struct Asset {
 pub struct DisplayOptions {
     #[serde(default)]
     pub show_collection_metadata: bool,
+    #[serde(default)]
+    pub show_grand_total: bool,
 }
