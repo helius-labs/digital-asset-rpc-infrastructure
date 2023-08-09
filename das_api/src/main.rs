@@ -20,7 +20,7 @@ use {
 };
 
 use hyper::Method;
-use log::{debug, info};
+use log::debug;
 use tower_http::cors::{Any, CorsLayer};
 
 use jsonrpsee::server::{
@@ -74,7 +74,7 @@ impl Logger for MetricMiddleware {
             true => "success",
             false => "failure",
         };
-        info!(
+        debug!(
             "Call to '{}' {} took {:?}",
             name,
             stat,
@@ -118,7 +118,8 @@ impl Logger for MetricMiddleware {
 async fn main() -> Result<(), DasApiError> {
     env::set_var(
         env_logger::DEFAULT_FILTER_ENV,
-        env::var_os(env_logger::DEFAULT_FILTER_ENV).unwrap_or_else(|| "info,sqlx=debug".into()),
+        env::var_os(env_logger::DEFAULT_FILTER_ENV)
+            .unwrap_or_else(|| "info,sqlx::query=warn,jsonrpsee_server::server=warn".into()),
     );
     env_logger::init();
     let config = load_config()?;
