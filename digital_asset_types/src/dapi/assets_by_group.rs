@@ -20,6 +20,7 @@ pub async fn get_assets_by_group(
     transform: &AssetTransform,
     enable_grand_total_query: bool,
 ) -> Result<AssetList, DbErr> {
+    // TODO: Explore further optimizing the unsorted query
     let pagination = create_pagination(before, after, page)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
     let (assets, grand_total) = scopes::asset::get_by_grouping(
@@ -34,31 +35,6 @@ pub async fn get_assets_by_group(
     )
     .await?;
 
-    // TODO: Explore further optimizing this query
-    // let (assets, grand_total) = if sorting.sort_by == AssetSortBy::None {
-    //     scopes::asset::get_by_grouping_unsorted(
-    //         db,
-    //         group_key,
-    //         group_value,
-    //         &pagination,
-    //         limit,
-    //         enable_grand_total_query,
-    //     )
-    //     .await?
-    // } else {
-    //     let (sort_direction, sort_column) = create_sorting(sorting);
-    //     scopes::asset::get_by_grouping(
-    //         db,
-    //         group_key.clone(),
-    //         group_value.clone(),
-    //         sort_column,
-    //         sort_direction,
-    //         &pagination,
-    //         limit,
-    //         enable_grand_total_query,
-    //     )
-    //     .await?
-    // };
     Ok(build_asset_response(
         assets,
         limit,
