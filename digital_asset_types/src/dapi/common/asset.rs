@@ -348,10 +348,11 @@ pub fn to_grouping(groups: Vec<asset_grouping::Model>) -> Result<Vec<Group>, DbE
             group_key: model.group_key.clone(),
             group_value: Some(
                 model
-                    .group_value
-                    .clone()
-                    .ok_or(DbErr::Custom("Group value not found".to_string()))?,
+                .group_value
+                .clone()
+                .ok_or(DbErr::Custom("Group value not found".to_string()))?,
             ),
+            collection_metadata: None,
         })
     }
 
