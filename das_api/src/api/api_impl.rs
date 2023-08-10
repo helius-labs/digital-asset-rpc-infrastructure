@@ -10,7 +10,11 @@ use digital_asset_types::{
         get_asset, get_assets_by_authority, get_assets_by_creator, get_assets_by_group,
         get_assets_by_owner, get_proof_for_asset, get_signatures_for_asset, search_assets,
     },
-    rpc::{filter::SearchConditionType, response::GetGroupingResponse, transform::AssetTransform},
+    rpc::{
+        filter::{AssetSortBy, SearchConditionType},
+        response::GetGroupingResponse,
+        transform::AssetTransform,
+    },
     rpc::{OwnershipModel, RoyaltyModel},
 };
 use open_rpc_derive::document_rpc;
@@ -92,6 +96,45 @@ impl DasApi {
             validate_pubkey(after.clone())?;
         }
 
+        Ok(())
+    }
+
+    fn validate_sorting_for_collection(
+        &self,
+        group: &String,
+        collection: &String,
+        sort_by: &Option<AssetSorting>,
+    ) -> Result<(), DasApiError> {
+        // List of collections which contain more than 300k nfts
+        let collections: [&str; 17] = [
+            "DRiP2Pn2K6fuMLKQmt5rZWyHiUZ6WK3GChEySUpHSS4x",
+            "DGPTxgKaBPJv3Ng7dc9AFDpX6E7kgUMZEgyTm3VGWPW6",
+            "VLT1ERWF2SQ51ybTGAuSBDWFZCxYth8ox6faJG9WrmG",
+            "8drYRaD7csLTEqX89hyM1XpTmXkQh4Evr1xQue2XkdB5",
+            "FLRxZJb7Kpd5i9Q7WdH7r5uRqDL7oJVpqW3ew8FpE336",
+            "DAA1jBEYj2w4DgMRDVaXg5CWfjmTry5t8VEvLJQ9R8PY",
+            "tinyVrmxcEUyVufgmFzGYe7C4mrGXDC21uLJAGVKXkg",
+            "BoRKkxKPoAt7LcyVRPa9ZZT5MztkJuc4PiGrUXAgDHPH",
+            "2bJpbZ5VNp48LpTh2DSwiuo6gJsTrh59TjcsAfRCLNXZ",
+            "BZ3DohF6BHGkAnZAe1g8ohWVuh95bXT4FhiGw1BXJWfF",
+            "MAQNiWAYh5yGCQKeWFzHLypThEjfTJfBQxwiF8P5Vax",
+            "AMSNskm2RZqPXCZ6P2z6JLyHWMQF6pQ8RA8Q6x42Xufq",
+            "F8FdDYD3PWndYoae9TrBcucXDWFwDvm6bZU2LQT1PwyB",
+            "DASHYFhWiCoe8PNCHZJAjmvGBBj8SLtkvW2uYV2e3FrV",
+            "BTDX3HWvRv16j4KUUbdegP3oazyVGCLxJpFqSQZ2bH6n",
+            "8tWwfmudVrrRzACvtt18H5vHVxsYofMyeGt7L3LFPSqC",
+            "WoMbiTtXKwUtf4wosoffv45khVF8yA2mPkinGosCFQ4",
+        ];
+
+        if group == "collection" && collections.contains(&collection.as_str()) {
+            if sort_by.clone().map(|s| s.sort_by) == Some(AssetSortBy::None) {
+                return Ok(());
+            } else {
+                return Err(DasApiError::ValidationError(
+                    format!("Sorting is not supported for collection {}. Please set 'sortBy' to 'none' to disable sorting.", collection),
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -190,9 +233,10 @@ impl ApiContract for DasApi {
             before,
             after,
         } = payload;
+        self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
+        let sort_by = sort_by.unwrap_or_default();
         let before: Option<String> = before.filter(|before| !before.is_empty());
         let after: Option<String> = after.filter(|after| !after.is_empty());
-        let sort_by = sort_by.unwrap_or_default();
         self.validate_pagination(&limit, &page, &before, &after)?;
         let transform = AssetTransform {
             cdn_prefix: self.cdn_prefix.clone(),
@@ -313,6 +357,7 @@ impl ApiContract for DasApi {
             before,
             after,
             json_uri,
+            show_collection_metadata,
         } = payload;
         // Deserialize search assets query
         self.validate_pagination(&limit, &page, &before, &after)?;
@@ -379,6 +424,8 @@ impl ApiContract for DasApi {
             after.map(|x| bs58::decode(x).into_vec().unwrap_or_default()),
             &transform,
             self.feature_flags.enable_grand_total_query,
+            self.feature_flags.enable_collection_metadata
+                && show_collection_metadata.unwrap_or(false),
         )
         .await
         .map_err(Into::into)
