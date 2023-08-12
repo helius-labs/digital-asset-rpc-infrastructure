@@ -270,7 +270,13 @@ pub async fn get_related_for_assets(
     let grouping = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.is_in(ids.clone()))
         .filter(asset_grouping::Column::GroupValue.is_not_null())
-        .filter(asset_grouping::Column::Verified.eq(true))
+        .filter(
+            Condition::any()
+                .add(asset_grouping::Column::Verified.eq(true))
+                // Older versions of the indexer did not have the verified flag. A group would be present if and only if it was verified.
+                // Therefore if verified is null, we can assume that the group is verified.
+                .add(asset_grouping::Column::Verified.is_null()),
+        )
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
@@ -322,7 +328,7 @@ pub async fn get_by_id(
     let asset_data: (asset::Model, asset_data::Model) =
         asset_data.one(conn).await.and_then(|o| match o {
             Some((a, Some(d))) => Ok((a, d)),
-            _ => Err(DbErr::RecordNotFound("Asset Not Found".to_string()))
+            _ => Err(DbErr::RecordNotFound("Asset Not Found".to_string())),
         })?;
 
     let (asset, data) = asset_data;
@@ -339,7 +345,13 @@ pub async fn get_by_id(
     let grouping: Vec<asset_grouping::Model> = asset_grouping::Entity::find()
         .filter(asset_grouping::Column::AssetId.eq(asset.id.clone()))
         .filter(asset_grouping::Column::GroupValue.is_not_null())
-        .filter(asset_grouping::Column::Verified.eq(true))
+        .filter(
+            Condition::any()
+                .add(asset_grouping::Column::Verified.eq(true))
+                // Older versions of the indexer did not have the verified flag. A group would be present if and only if it was verified.
+                // Therefore if verified is null, we can assume that the group is verified.
+                .add(asset_grouping::Column::Verified.is_null()),
+        )
         .order_by_asc(asset_grouping::Column::AssetId)
         .all(conn)
         .await?;
