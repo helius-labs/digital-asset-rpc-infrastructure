@@ -75,7 +75,11 @@ pub async fn get_grouping(
             Condition::all()
                 .add(asset_grouping::Column::GroupKey.eq(group_key))
                 .add(asset_grouping::Column::GroupValue.eq(group_value))
-                .add(asset_grouping::Column::Verified.eq(true)),
+                .add(
+                    Condition::any()
+                        .add(asset_grouping::Column::Verified.eq(true))
+                        .add(asset_grouping::Column::Verified.is_null()),
+                ),
         )
         .count(conn)
         .await?;
@@ -95,7 +99,11 @@ pub async fn get_by_grouping(
     let condition = asset_grouping::Column::GroupKey
         .eq(group_key)
         .and(asset_grouping::Column::GroupValue.eq(group_value))
-        .and(asset_grouping::Column::Verified.eq(true));
+        .and(
+            asset_grouping::Column::Verified
+                .eq(true)
+                .or(asset_grouping::Column::Verified.is_null()),
+        );
     get_by_related_condition(
         conn,
         Condition::all()
@@ -339,7 +347,7 @@ pub async fn get_by_id(
         .await?;
     let creators: Vec<asset_creators::Model> = asset_creators::Entity::find()
         .filter(asset_creators::Column::AssetId.eq(asset.id.clone()))
-        .order_by_asc(asset_creators::Column::AssetId)
+        .order_by_asc(asset_creators::Column::Position)
         .all(conn)
         .await?;
     let grouping: Vec<asset_grouping::Model> = asset_grouping::Entity::find()
