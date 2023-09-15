@@ -198,6 +198,10 @@ pub fn v1_content_from_json(
             meta.set_item("symbol", symbol.clone());
         }
     }
+    let token_standard = safe_select(chain_data_selector, "$.token_standard");
+    if let Some(token_standard) = token_standard {
+        meta.set_item("token_standard", token_standard.clone());
+    }
     let desc = safe_select(selector, "$.description");
     if let Some(desc) = desc {
         meta.set_item("description", desc.clone());
