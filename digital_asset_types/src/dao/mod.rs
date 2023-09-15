@@ -250,7 +250,13 @@ impl SearchAssetsQuery {
         }
 
         if let Some(n) = self.name.to_owned() {
-            let cond = Condition::all().add(asset_data::Column::RawName.eq(n));
+            let name_as_str = std::str::from_utf8(&n).map_err(|_| {
+                DbErr::Custom(
+                    "Could not convert raw name bytes into string for comparison".to_owned(),
+                )
+            })?;
+
+            let cond = Condition::all().add(asset_data::Column::RawName.like(name_as_str));
             conditions = conditions.add(cond);
             let rel = asset_data::Relation::Asset
                 .def()
