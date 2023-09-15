@@ -22,7 +22,7 @@ use sea_orm::{sea_query::ConditionType, ConnectionTrait, DbBackend, Statement};
 
 use crate::{
     feature_flag::{get_feature_flags, FeatureFlags},
-    validation::validate_opt_pubkey,
+    validation::{validate_opt_pubkey, validate_search_with_name},
 };
 use open_rpc_schema::document::OpenrpcDocument;
 use {
@@ -358,6 +358,7 @@ impl ApiContract for DasApi {
             after,
             json_uri,
             show_collection_metadata,
+            name,
         } = payload;
         // Deserialize search assets query
         self.validate_pagination(&limit, &page, &before, &after)?;
@@ -370,6 +371,7 @@ impl ApiContract for DasApi {
             SearchConditionType::All => ConditionType::All,
         });
         let owner_address = validate_opt_pubkey(&owner_address)?;
+        let name = validate_search_with_name(&name, &owner_address)?;
         let creator_address = validate_opt_pubkey(&creator_address)?;
         let delegate = validate_opt_pubkey(&delegate)?;
 
@@ -408,6 +410,7 @@ impl ApiContract for DasApi {
             royalty_amount,
             burnt,
             json_uri,
+            name,
         };
         let sort_by = sort_by.unwrap_or_default();
         let transform = AssetTransform {
