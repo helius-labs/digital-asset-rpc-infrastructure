@@ -22,7 +22,7 @@ use digital_asset_types::{
     },
     json::ChainDataV1,
 };
-use log::info;
+use log::warn;
 use num_traits::FromPrimitive;
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ConnectionTrait, DbBackend, EntityTrait, JsonValue,
@@ -32,16 +32,14 @@ use std::collections::HashSet;
 use digital_asset_types::dao::sea_orm_active_enums::{
     SpecificationAssetClass, SpecificationVersions, V1AccountAttachments,
 };
-use mpl_bubblegum::{hash_creators, hash_metadata};
 
 // TODO -> consider moving structs into these functions to avoid clone
-
 pub async fn mint_v1<'c, T>(
     parsing_result: &BubblegumInstruction,
     bundle: &InstructionBundle<'c>,
     txn: &'c T,
     instruction: &str,
-) -> Result<TaskData, IngesterError>
+) -> Result<Option<TaskData>, IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
@@ -86,16 +84,11 @@ where
                     true => ChainMutability::Mutable,
                     false => ChainMutability::Immutable,
                 };
-                if uri.is_empty() {
-                    return Err(IngesterError::DeserializationError(
-                        "URI is empty".to_string(),
-                    ));
-                }
                 let data = asset_data::ActiveModel {
                     id: Set(id_bytes.to_vec()),
                     chain_data_mutability: Set(chain_mutability),
                     chain_data: Set(chain_data_json),
-                    metadata_url: Set(uri),
+                    metadata_url: Set(uri.clone()),
                     metadata: Set(JsonValue::String("processing".to_string())),
                     metadata_mutability: Set(Mutability::Mutable),
                     slot_updated: Set(slot_i),
@@ -342,16 +335,25 @@ where
                 )
                 .await?;
 
+                if uri.is_empty() {
+                    warn!(
+                        "URI is empty for mint {}. Skipping background task.",
+                        bs58::encode(id).into_string()
+                    );
+                    return Ok(None);
+                }
+
                 let mut task = DownloadMetadata {
                     asset_data_id: id_bytes.to_vec(),
                     uri: metadata.uri.clone(),
                     created_at: Some(Utc::now().naive_utc()),
                 };
                 task.sanitize();
-                return task.into_task_data();
+                let t = task.into_task_data()?;
+                Ok(Some(t))
             }
             _ => Err(IngesterError::NotImplemented),
-        }?;
+        };
     }
     Err(IngesterError::ParsingError(
         "Ix not parsed correctly".to_string(),

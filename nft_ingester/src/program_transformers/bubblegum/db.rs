@@ -3,7 +3,7 @@ use digital_asset_types::dao::{
     asset, asset_creators, asset_grouping, backfill_items, cl_audits, cl_items,
 };
 use log::{debug, error, info};
-use mpl_bubblegum::state::metaplex_adapter::Collection;
+use mpl_bubblegum::types::Collection;
 use sea_orm::{
     query::*, sea_query::OnConflict, ActiveValue::Set, ColumnTrait, DbBackend, EntityTrait,
 };
