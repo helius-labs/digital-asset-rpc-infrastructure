@@ -52,6 +52,7 @@ where
         InstructionName::VerifyCollection => "VerifyCollection",
         InstructionName::UnverifyCollection => "UnverifyCollection",
         InstructionName::SetAndVerifyCollection => "SetAndVerifyCollection",
+        InstructionName::SetDecompressibleState | InstructionName::UpdateMetadata => todo!(),
     };
     info!("BGUM instruction txn={:?}: {:?}", ix_str, bundle.txn_id);
 
@@ -68,7 +69,9 @@ where
         InstructionName::MintV1 | InstructionName::MintToCollectionV1 => {
             let task = mint_v1::mint_v1(parsing_result, bundle, txn, ix_str).await?;
 
-            task_manager.send(task)?;
+            if let Some(t) = task {
+                task_manager.send(t)?;
+            }
         }
         InstructionName::Redeem => {
             redeem::redeem(parsing_result, bundle, txn, ix_str).await?;
