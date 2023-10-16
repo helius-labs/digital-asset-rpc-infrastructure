@@ -11,7 +11,7 @@ use self::sea_orm_active_enums::{
 use sea_orm::{
     entity::*,
     sea_query::Expr,
-    sea_query::{ConditionType, IntoCondition},
+    sea_query::{ConditionType, IntoCondition, SimpleExpr},
     Condition, DbErr, RelationDef,
 };
 
@@ -256,9 +256,9 @@ impl SearchAssetsQuery {
                 )
             })?;
 
-            let name_expr = SimpleExpr::Custom(format!("chain_data->>'name' LIKE '%{}%'", name_as_str).into());
+            let name_expr =
+                SimpleExpr::Custom(format!("chain_data->>'name' LIKE '%{}%'", name_as_str).into());
             conditions = conditions.add(name_expr);
-            conditions = conditions.add(cond);
             let rel = asset_data::Relation::Asset
                 .def()
                 .rev()
