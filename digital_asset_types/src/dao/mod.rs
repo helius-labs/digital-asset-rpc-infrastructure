@@ -11,7 +11,7 @@ use self::sea_orm_active_enums::{
 use sea_orm::{
     entity::*,
     sea_query::Expr,
-    sea_query::{ConditionType, IntoCondition},
+    sea_query::{ConditionType, IntoCondition, SimpleExpr},
     Condition, DbErr, RelationDef,
 };
 
@@ -54,6 +54,7 @@ pub struct SearchAssetsQuery {
     pub royalty_amount: Option<u32>,
     pub burnt: Option<bool>,
     pub json_uri: Option<String>,
+    pub name: Option<Vec<u8>>,
 }
 
 impl SearchAssetsQuery {
@@ -113,6 +114,9 @@ impl SearchAssetsQuery {
             num_conditions += 1;
         }
         if self.json_uri.is_some() {
+            num_conditions += 1;
+        }
+        if self.name.is_some() {
             num_conditions += 1;
         }
 
@@ -234,6 +238,27 @@ impl SearchAssetsQuery {
         if let Some(ju) = self.json_uri.to_owned() {
             let cond = Condition::all().add(asset_data::Column::MetadataUrl.eq(ju));
             conditions = conditions.add(cond);
+            let rel = asset_data::Relation::Asset
+                .def()
+                .rev()
+                .on_condition(|left, right| {
+                    Expr::tbl(right, asset_data::Column::Id)
+                        .eq(Expr::tbl(left, asset::Column::AssetData))
+                        .into_condition()
+                });
+            joins.push(rel);
+        }
+
+        if let Some(n) = self.name.to_owned() {
+            let name_as_str = std::str::from_utf8(&n).map_err(|_| {
+                DbErr::Custom(
+                    "Could not convert raw name bytes into string for comparison".to_owned(),
+                )
+            })?;
+
+            let name_expr =
+                SimpleExpr::Custom(format!("chain_data->>'name' LIKE '%{}%'", name_as_str).into());
+            conditions = conditions.add(name_expr);
             let rel = asset_data::Relation::Asset
                 .def()
                 .rev()
