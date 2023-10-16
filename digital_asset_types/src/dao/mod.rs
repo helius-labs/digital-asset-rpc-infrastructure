@@ -256,7 +256,8 @@ impl SearchAssetsQuery {
                 )
             })?;
 
-            let cond = Condition::all().add(asset_data::Column::RawName.like(name_as_str));
+            let name_expr = SimpleExpr::Custom(format!("chain_data->>'name' LIKE '%{}%'", name_as_str).into());
+            conditions = conditions.add(name_expr);
             conditions = conditions.add(cond);
             let rel = asset_data::Relation::Asset
                 .def()
