@@ -114,11 +114,15 @@ pub async fn get_by_grouping(
     enable_grand_total_query: bool,
     show_unverified_collections: bool,
 ) -> Result<(Vec<FullAsset>, Option<u64>), DbErr> {
-    let expr = asset_grouping::Column::GroupValue.eq(group_value).and(
-        asset_grouping::Column::Verified
-            .eq(true)
-            .or(asset_grouping::Column::Verified.is_null()),
-    );
+    let mut expr = asset_grouping::Column::GroupValue.eq(group_value);
+    if !show_unverified_collections {
+        expr = expr.and(
+            asset_grouping::Column::Verified
+                .eq(true)
+                .or(asset_grouping::Column::Verified.is_null()),
+        );
+    }
+
     let condition = Condition::all().add(expr);
     get_assets_by_condition(
         conn,
