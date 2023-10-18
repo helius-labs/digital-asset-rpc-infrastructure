@@ -1,13 +1,10 @@
-use crate::config::Config;
+use digital_asset_types::feature_flag::FeatureFlags;
 
-pub struct FeatureFlags {
-    pub enable_grand_total_query: bool,
-    pub enable_collection_metadata: bool,
-}
+use crate::config::Config;
 
 pub fn get_feature_flags(config: &Config) -> FeatureFlags {
     FeatureFlags {
-        enable_grand_total_query: config.enable_grand_total_query.unwrap_or(false),
-        enable_collection_metadata: config.enable_collection_metadata.unwrap_or(false),
+        enable_grand_total_query: config.enable_grand_total_query.unwrap_or(true),
+        enable_collection_metadata: config.enable_collection_metadata.unwrap_or(true),
     }
 }

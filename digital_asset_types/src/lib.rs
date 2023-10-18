@@ -2,6 +2,7 @@
 pub mod dao;
 #[cfg(feature = "sql_types")]
 pub mod dapi;
+pub mod feature_flag;
 #[cfg(feature = "json_types")]
 pub mod json;
 #[cfg(feature = "json_types")]

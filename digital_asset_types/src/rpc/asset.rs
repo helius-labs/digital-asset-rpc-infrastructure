@@ -204,6 +204,8 @@ pub struct Group {
     pub group_key: String,
     pub group_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub collection_metadata: Option<CollectionMetadata>,
 }
 

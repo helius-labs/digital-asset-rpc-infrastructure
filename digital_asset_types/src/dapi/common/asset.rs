@@ -1,10 +1,11 @@
 use crate::dao::sea_orm_active_enums::SpecificationVersions;
 use crate::dao::FullAsset;
+use crate::dao::PageOptions;
 use crate::dao::Pagination;
 use crate::dao::{asset, asset_authority, asset_creators, asset_data, asset_grouping};
+use crate::rpc::display_options::DisplayOptions;
 use crate::rpc::filter::{AssetSortBy, AssetSortDirection, AssetSorting};
 use crate::rpc::response::{AssetError, AssetList, TransactionSignatureList};
-use crate::rpc::transform::AssetTransform;
 use crate::rpc::{
     Asset as RpcAsset, Authority, Compression, Content, Creator, File, Group, Interface,
     MetadataMap, Ownership, Royalty, Scope, Supply, Uses,
@@ -51,20 +52,29 @@ pub fn build_asset_response(
     limit: u64,
     grand_total: Option<u64>,
     pagination: &Pagination,
-    transform: &AssetTransform,
+    display_options: &DisplayOptions,
 ) -> AssetList {
     let total = assets.len() as u32;
-    let (page, before, after) = match pagination {
+    let (page, before, after, cursor) = match pagination {
         Pagination::Keyset { before, after } => {
             let bef = before.clone().and_then(|x| String::from_utf8(x).ok());
             let aft = after.clone().and_then(|x| String::from_utf8(x).ok());
-            (None, bef, aft)
+            (None, bef, aft, None)
         }
-        Pagination::Page { page } => (Some(*page), None, None),
+        Pagination::Page { page } => (Some(*page), None, None, None),
+        Pagination::Cursor(_) => {
+            if let Some(last_asset) = assets.last() {
+                let cursor_str = bs58::encode(&last_asset.asset.id.clone()).into_string();
+                (None, None, None, Some(cursor_str))
+            } else {
+                (None, None, None, None)
+            }
+        }
     };
-    let (items, errors) = asset_list_to_rpc(assets, transform);
+
+    let (items, errors) = asset_list_to_rpc(assets, display_options);
     AssetList {
-        // grand_total: grand_total.unwrap(), // TODO
+        grand_total: grand_total,
         total,
         limit: limit as u32,
         page: page.map(|x| x as u32),
@@ -72,11 +82,12 @@ pub fn build_asset_response(
         after,
         items,
         errors,
+        cursor,
     }
 }
 
 pub fn build_transaction_signatures_response(
-    items: Vec<Vec<String>>,
+    items: Vec<(String, String)>,
     limit: u64,
     pagination: &Pagination,
 ) -> TransactionSignatureList {
@@ -88,6 +99,7 @@ pub fn build_transaction_signatures_response(
             (None, bef, aft)
         }
         Pagination::Page { page } => (Some(*page), None, None),
+        Pagination::Cursor { .. } => (None, None, None),
     };
     TransactionSignatureList {
         total,
@@ -101,6 +113,7 @@ pub fn build_transaction_signatures_response(
 
 pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, Option<asset::Column>) {
     let sort_column = match sorting.sort_by {
+        AssetSortBy::Id => Some(asset::Column::Id),
         AssetSortBy::Created => Some(asset::Column::CreatedAt),
         AssetSortBy::Updated => Some(asset::Column::SlotUpdated),
         AssetSortBy::RecentAction => Some(asset::Column::SlotUpdated),
@@ -113,18 +126,22 @@ pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, Option<a
     (sort_direction, sort_column)
 }
 
-pub fn create_pagination(
-    before: Option<Vec<u8>>,
-    after: Option<Vec<u8>>,
-    page: Option<u64>,
-) -> Result<Pagination, DbErr> {
-    match (&before, &after, &page) {
-        (_, _, None) => Ok(Pagination::Keyset {
-            before: before.map(|x| x.into()),
-            after: after.map(|x| x.into()),
-        }),
-        (None, None, Some(p)) => Ok(Pagination::Page { page: *p }),
-        _ => Err(DbErr::Custom("Invalid Pagination".to_string())),
+pub fn create_pagination(page_options: &PageOptions) -> Result<Pagination, DbErr> {
+    if let Some(cursor) = &page_options.cursor {
+        Ok(Pagination::Cursor(cursor.clone()))
+    } else {
+        match (
+            page_options.before.as_ref(),
+            page_options.after.as_ref(),
+            page_options.page,
+        ) {
+            (_, _, None) => Ok(Pagination::Keyset {
+                before: page_options.before.clone(),
+                after: page_options.after.clone(),
+            }),
+            (None, None, Some(p)) => Ok(Pagination::Page { page: p }),
+            _ => Err(DbErr::Custom("Invalid Pagination".to_string())),
+        }
     }
 }
 
@@ -169,8 +186,7 @@ fn process_raw_fields(
 
 pub fn v1_content_from_json(
     asset_data: &asset_data::Model,
-    cdn_prefix: Option<String>,
-    raw_data: Option<bool>,
+    display_options: &DisplayOptions,
 ) -> Result<Content, DbErr> {
     // todo -> move this to the bg worker for pre processing
     let json_uri = asset_data.metadata_url.clone();
@@ -180,7 +196,7 @@ pub fn v1_content_from_json(
     let selector = &mut selector_fn;
     let chain_data_selector = &mut chain_data_selector_fn;
     let mut meta: MetadataMap = MetadataMap::new();
-    if raw_data.unwrap_or(false) {
+    if display_options.show_raw_data {
         let (name, symbol) = process_raw_fields(&asset_data.raw_name, &asset_data.raw_symbol);
         if let Some(name) = name {
             meta.set_item("name", name.into());
@@ -279,7 +295,7 @@ pub fn v1_content_from_json(
     });
 
     // Enrich files with CDN for images (optional).
-    if let Some(cdn_prefix) = &cdn_prefix {
+    if let Some(cdn_prefix) = display_options.cdn_prefix.clone() {
         // Use default options for now.
         let cdn_options = "";
         files.iter_mut().for_each(|f| match (&f.uri, &f.mime) {
@@ -309,12 +325,11 @@ pub fn v1_content_from_json(
 pub fn get_content(
     asset: &asset::Model,
     data: &asset_data::Model,
-    cdn_prefix: Option<String>,
-    raw_data: Option<bool>,
+    display_options: &DisplayOptions,
 ) -> Result<Content, DbErr> {
     match asset.specification_version {
         Some(SpecificationVersions::V1) | Some(SpecificationVersions::V0) => {
-            v1_content_from_json(data, cdn_prefix, raw_data)
+            v1_content_from_json(data, display_options)
         }
         Some(_) => Err(DbErr::Custom("Version Not Implemented".to_string())),
         None => Err(DbErr::Custom("Specification version not found".to_string())),
@@ -342,21 +357,29 @@ pub fn to_creators(creators: Vec<asset_creators::Model>) -> Vec<Creator> {
         .collect()
 }
 
-pub fn to_grouping(groups: Vec<asset_grouping::Model>) -> Result<Vec<Group>, DbErr> {
-    fn find_group(model: &asset_grouping::Model) -> Result<Group, DbErr> {
-        Ok(Group {
-            group_key: model.group_key.clone(),
-            group_value: Some(
-                model
-                    .group_value
-                    .clone()
-                    .ok_or(DbErr::Custom("Group value not found".to_string()))?,
-            ),
-            collection_metadata: None,
+pub fn to_grouping(
+    groups: Vec<asset_grouping::Model>,
+    display_options: &DisplayOptions,
+) -> Result<Vec<Group>, DbErr> {
+    let result: Vec<Group> = groups
+        .iter()
+        .filter_map(|model| {
+            // Only show verification info if requested via display options.
+            let verified = match display_options.show_unverified_collections {
+                // Null verified indicates legacy data, meaning it is verified.
+                true => Some(model.verified.unwrap_or(true)),
+                false => None,
+            };
+            // Filter out items where group_value is None.
+            model.group_value.clone().map(|group_value| Group {
+                group_key: model.group_key.clone(),
+                group_value: Some(group_value),
+                verified,
+                collection_metadata: None,
+            })
         })
-    }
-
-    groups.iter().map(find_group).collect()
+        .collect();
+    Ok(result)
 }
 
 pub fn get_interface(asset: &asset::Model) -> Result<Interface, DbErr> {
@@ -375,11 +398,7 @@ pub fn get_interface(asset: &asset::Model) -> Result<Interface, DbErr> {
 }
 
 //TODO -> impl custom error type
-pub fn asset_to_rpc(
-    asset: FullAsset,
-    transform: &AssetTransform,
-    raw_data: Option<bool>,
-) -> Result<RpcAsset, DbErr> {
+pub fn asset_to_rpc(asset: FullAsset, display_options: &DisplayOptions) -> Result<RpcAsset, DbErr> {
     let FullAsset {
         asset,
         data,
@@ -389,9 +408,9 @@ pub fn asset_to_rpc(
     } = asset;
     let rpc_authorities = to_authority(authorities);
     let rpc_creators = to_creators(creators);
-    let rpc_groups = to_grouping(groups)?;
+    let rpc_groups = to_grouping(groups, display_options)?;
     let interface = get_interface(&asset)?;
-    let content = get_content(&asset, &data, transform.cdn_prefix.clone(), raw_data)?;
+    let content = get_content(&asset, &data, display_options)?;
     let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
     let chain_data_selector = &mut chain_data_selector_fn;
     let basis_points = safe_select(chain_data_selector, "$.primary_sale_happened")
@@ -471,13 +490,13 @@ pub fn asset_to_rpc(
 
 pub fn asset_list_to_rpc(
     asset_list: Vec<FullAsset>,
-    transform: &AssetTransform,
+    display_options: &DisplayOptions,
 ) -> (Vec<RpcAsset>, Vec<AssetError>) {
     asset_list
         .into_iter()
         .fold((vec![], vec![]), |(mut assets, mut errors), asset| {
             let id = bs58::encode(asset.asset.id.clone()).into_string();
-            match asset_to_rpc(asset, transform, None) {
+            match asset_to_rpc(asset, display_options) {
                 Ok(rpc_asset) => assets.push(rpc_asset),
                 Err(e) => errors.push(AssetError {
                     id,
