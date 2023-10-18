@@ -5598,33 +5598,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "anchor-lang"
-version = "0.25.0"
-source = "git+https://github.com/metaplex-foundation/anchor#b00fe70d1bb2bf38807bcb3a1987cfb14eb62058"
-
-[[patch.unused]]
-name = "blockbuster"
-version = "0.7.3"
-source = "git+https://github.com/metaplex-foundation/blockbuster?branch=1.14#e855eeb1f53030122afc9e3dd1b1124c818c64d6"
-
-[[patch.unused]]
-name = "mpl-bubblegum"
-version = "0.7.0"
-source = "git+https://github.com/metaplex-foundation/metaplex-program-library?branch=update-deps#94b06af274ba7eff1f02546b35dd922912d0136b"
-
-[[patch.unused]]
-name = "mpl-candy-guard"
-version = "0.3.0"
-source = "git+https://github.com/metaplex-foundation/mpl-candy-guard?branch=update-deps#7abc0b7640b807640850131d14214edbf12248bc"
-
-[[patch.unused]]
-name = "mpl-candy-machine-core"
-version = "0.2.0"
-source = "git+https://github.com/metaplex-foundation/metaplex-program-library?branch=update-deps#94b06af274ba7eff1f02546b35dd922912d0136b"
-
-[[patch.unused]]
-name = "mpl-token-metadata"
-version = "1.7.0"
-source = "git+https://github.com/metaplex-foundation/metaplex-program-library?branch=update-deps#94b06af274ba7eff1f02546b35dd922912d0136b"

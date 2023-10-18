@@ -22,7 +22,8 @@ pub struct GetGroupingResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
 #[serde(default)]
 pub struct AssetList {
-    // pub grand_total: u64, // TODO: not adding this for now because we aren't committing to the schema
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grand_total: Option<u64>,
     pub total: u32,
     pub limit: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,6 +32,8 @@ pub struct AssetList {
     pub before: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
     pub items: Vec<Asset>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<AssetError>,
@@ -47,5 +50,5 @@ pub struct TransactionSignatureList {
     pub before: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<String>,
-    pub items: Vec<Vec<String>>,
+    pub items: Vec<(String, String)>,
 }
