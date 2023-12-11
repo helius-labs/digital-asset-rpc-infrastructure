@@ -4,7 +4,7 @@ use digital_asset_types::dao::asset_data;
 use digital_asset_types::dao::sea_orm_active_enums::{ChainMutability, Mutability};
 use digital_asset_types::dapi::common::v1_content_from_json;
 use digital_asset_types::json::ChainDataV1;
-use digital_asset_types::rpc::display_options::DisplayOptions;
+use digital_asset_types::rpc::options::Options;
 use digital_asset_types::rpc::Content;
 use digital_asset_types::rpc::File;
 use solana_sdk::signature::Keypair;
@@ -17,10 +17,7 @@ pub async fn load_test_json(file_name: &str) -> serde_json::Value {
     serde_json::from_str(&json).unwrap()
 }
 
-pub async fn parse_onchain_json(
-    json: serde_json::Value,
-    display_options: &DisplayOptions,
-) -> Content {
+pub async fn parse_onchain_json(json: serde_json::Value, options: &Options) -> Content {
     let asset_data = asset_data::Model {
         id: Keypair::new().pubkey().to_bytes().to_vec(),
         chain_data_mutability: ChainMutability::Mutable,
@@ -42,17 +39,17 @@ pub async fn parse_onchain_json(
         raw_symbol: Some(String::from("  ").into_bytes().to_vec()),
     };
 
-    v1_content_from_json(&asset_data, display_options).unwrap()
+    v1_content_from_json(&asset_data, options).unwrap()
 }
 
 #[tokio::test]
 async fn simple_content() {
-    let mut display_options = DisplayOptions::default();
+    let mut options = Options::default();
 
-    display_options.cdn_prefix = None;
-    display_options.show_raw_data = true;
+    options.cdn_prefix = None;
+    options.show_raw_data = true;
     let j = load_test_json("mad_lad.json").await;
-    let mut parsed = parse_onchain_json(j.clone(), &display_options).await;
+    let mut parsed = parse_onchain_json(j.clone(), &options).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -86,9 +83,9 @@ async fn simple_content() {
         _ => panic!("symbol key not found or not a string"),
     }
 
-    display_options.cdn_prefix = None;
-    display_options.show_raw_data = false;
-    parsed = parse_onchain_json(j.clone(), &display_options).await;
+    options.cdn_prefix = None;
+    options.show_raw_data = false;
+    parsed = parse_onchain_json(j.clone(), &options).await;
 
     match parsed.metadata.get_item("name") {
         Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf"),
@@ -126,11 +123,11 @@ async fn simple_content() {
 
 #[tokio::test]
 async fn simple_content_with_cdn() {
-    let mut display_options = DisplayOptions::default();
-    display_options.cdn_prefix = Some("https://cdn.foobar.blah".to_string());
+    let mut options = Options::default();
+    options.cdn_prefix = Some("https://cdn.foobar.blah".to_string());
 
     let j = load_test_json("mad_lad.json").await;
-    let parsed = parse_onchain_json(j, &display_options).await;
+    let parsed = parse_onchain_json(j, &options).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -157,10 +154,10 @@ async fn simple_content_with_cdn() {
 
 #[tokio::test]
 async fn complex_content() {
-    let mut display_options = DisplayOptions::default();
-    display_options.cdn_prefix = None;
+    let mut options = Options::default();
+    options.cdn_prefix = None;
     let j = load_test_json("infinite_fungi.json").await;
-    let parsed = parse_onchain_json(j, &display_options).await;
+    let parsed = parse_onchain_json(j, &options).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -212,10 +209,10 @@ async fn complex_content() {
 
 #[tokio::test]
 async fn complex_content_with_cdn() {
-    let mut display_options = DisplayOptions::default();
-    display_options.cdn_prefix = Some("https://cdn.foobar.blah".to_string());
+    let mut options = Options::default();
+    options.cdn_prefix = Some("https://cdn.foobar.blah".to_string());
     let j = load_test_json("infinite_fungi.json").await;
-    let parsed = parse_onchain_json(j, &display_options).await;
+    let parsed = parse_onchain_json(j, &options).await;
     assert_eq!(
         parsed.files,
         Some(vec![

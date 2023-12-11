@@ -5,7 +5,7 @@ use crate::{
         GroupingSize, Pagination,
     },
     dapi::common::safe_select,
-    rpc::{display_options::DisplayOptions, Asset, CollectionMetadata},
+    rpc::{options::Options, Asset, CollectionMetadata},
 };
 
 use indexmap::IndexMap;
@@ -380,7 +380,7 @@ pub async fn get_by_id(
     conn: &impl ConnectionTrait,
     asset_id: Vec<u8>,
     include_no_supply: bool,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> Result<FullAsset, DbErr> {
     let mut asset_data =
         asset::Entity::find_by_id(asset_id.clone()).find_also_related(asset_data::Entity);
@@ -404,7 +404,7 @@ pub async fn get_by_id(
         .order_by_asc(asset_creators::Column::Position)
         .all(conn)
         .await?;
-    let cond = if display_options.show_unverified_collections {
+    let cond = if options.show_unverified_collections {
         Condition::all()
     } else {
         Condition::any()

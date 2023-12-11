@@ -232,11 +232,11 @@ impl ApiContract for DasApi {
             .map_err(Into::into)
     }
 
-    async fn get_asset_proof_batch(
+    async fn get_asset_proofs(
         self: &DasApi,
-        payload: GetAssetProofBatch,
+        payload: GetAssetProofs,
     ) -> Result<HashMap<String, Option<AssetProof>>, DasApiError> {
-        let GetAssetProofBatch { ids } = payload;
+        let GetAssetProofs { ids } = payload;
 
         let batch_size = ids.len();
         if batch_size > 1000 {
@@ -258,31 +258,25 @@ impl ApiContract for DasApi {
     }
 
     async fn get_asset(self: &DasApi, payload: GetAsset) -> Result<Asset, DasApiError> {
-        let GetAsset {
-            id,
-            display_options,
-        } = payload;
+        let GetAsset { id, options } = payload;
         let id_bytes = validate_pubkey(id.clone())?.to_bytes().to_vec();
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         get_asset(
             &self.db_connection,
             id_bytes,
             &self.feature_flags,
-            &display_options.into(),
+            &options.into(),
         )
         .await
         .map_err(Into::into)
     }
 
-    async fn get_asset_batch(
+    async fn get_assets(
         self: &DasApi,
-        payload: GetAssetBatch,
+        payload: GetAssets,
     ) -> Result<Vec<Option<Asset>>, DasApiError> {
-        let GetAssetBatch {
-            ids,
-            display_options,
-        } = payload;
+        let GetAssets { ids, options } = payload;
 
         let batch_size = ids.len();
         if batch_size > 1000 {
@@ -294,14 +288,14 @@ impl ApiContract for DasApi {
             .map(|id| validate_pubkey(id.clone()).map(|id| id.to_bytes().to_vec()))
             .collect::<Result<Vec<Vec<u8>>, _>>()?;
 
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
 
         let assets = get_asset_batch(
             &self.db_connection,
             id_bytes,
             batch_size as u64,
-            &display_options.into(),
+            &options.into(),
         )
         .await?;
 
@@ -320,7 +314,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
-            display_options,
+            options,
             cursor,
         } = payload;
         let before: Option<String> = before.filter(|before| !before.is_empty());
@@ -330,15 +324,15 @@ impl ApiContract for DasApi {
         let sort_by = sort_by.unwrap_or_default();
         let page_options =
             self.validate_pagination(&limit, &page, &before, &after, &cursor, &Some(&sort_by))?;
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         get_assets_by_owner(
             &self.db_connection,
             owner_address_bytes,
             sort_by,
             &page_options,
             &self.feature_flags,
-            &display_options,
+            &options,
         )
         .await
         .map_err(Into::into)
@@ -356,7 +350,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
-            display_options,
+            options,
             cursor,
         } = payload;
         self.validate_sorting_for_collection(&group_key, &group_value, &sort_by)?;
@@ -365,15 +359,15 @@ impl ApiContract for DasApi {
         let sort_by = sort_by.unwrap_or_default();
         let page_options =
             self.validate_pagination(&limit, &page, &before, &after, &cursor, &Some(&sort_by))?;
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         get_assets_by_group(
             &self.db_connection,
             group_value,
             sort_by,
             &page_options,
             &self.feature_flags,
-            &display_options,
+            &options,
         )
         .await
         .map_err(Into::into)
@@ -391,7 +385,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
-            display_options,
+            options,
             cursor,
         } = payload;
         let creator_address = validate_pubkey(creator_address.clone())?;
@@ -401,8 +395,8 @@ impl ApiContract for DasApi {
         let page_options =
             self.validate_pagination(&limit, &page, &before, &after, &cursor, &Some(&sort_by))?;
         let only_verified = only_verified.unwrap_or_default();
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         get_assets_by_creator(
             &self.db_connection,
             creator_address_bytes,
@@ -410,7 +404,7 @@ impl ApiContract for DasApi {
             sort_by,
             &page_options,
             &self.feature_flags,
-            &display_options,
+            &options,
         )
         .await
         .map_err(Into::into)
@@ -427,7 +421,7 @@ impl ApiContract for DasApi {
             page,
             before,
             after,
-            display_options,
+            options,
             cursor,
         } = payload;
         let authority_address = validate_pubkey(authority_address.clone())?;
@@ -435,15 +429,15 @@ impl ApiContract for DasApi {
         let sort_by = sort_by.unwrap_or_default();
         let page_options =
             self.validate_pagination(&limit, &page, &before, &after, &cursor, &Some(&sort_by))?;
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         get_assets_by_authority(
             &self.db_connection,
             authority_address_bytes,
             sort_by,
             &page_options,
             &self.feature_flags,
-            &display_options,
+            &options,
         )
         .await
         .map_err(Into::into)
@@ -477,7 +471,7 @@ impl ApiContract for DasApi {
             before,
             after,
             json_uri,
-            display_options,
+            options,
             cursor,
             name,
         } = payload;
@@ -535,8 +529,8 @@ impl ApiContract for DasApi {
         let sort_by = sort_by.unwrap_or_default();
         let page_options =
             self.validate_pagination(&limit, &page, &before, &after, &cursor, &Some(&sort_by))?;
-        let mut display_options = display_options.unwrap_or_default();
-        display_options.cdn_prefix = self.cdn_prefix.clone();
+        let mut options = options.unwrap_or_default();
+        options.cdn_prefix = self.cdn_prefix.clone();
         // Execute query
         search_assets(
             &self.db_connection,
@@ -544,7 +538,7 @@ impl ApiContract for DasApi {
             sort_by,
             &page_options,
             &self.feature_flags,
-            &display_options,
+            &options,
         )
         .await
         .map_err(Into::into)

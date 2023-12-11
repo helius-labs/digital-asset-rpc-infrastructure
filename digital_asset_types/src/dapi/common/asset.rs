@@ -3,8 +3,8 @@ use crate::dao::FullAsset;
 use crate::dao::PageOptions;
 use crate::dao::Pagination;
 use crate::dao::{asset, asset_authority, asset_creators, asset_data, asset_grouping};
-use crate::rpc::display_options::DisplayOptions;
 use crate::rpc::filter::{AssetSortBy, AssetSortDirection, AssetSorting};
+use crate::rpc::options::Options;
 use crate::rpc::response::{AssetError, AssetList, TransactionSignatureList};
 use crate::rpc::{
     Asset as RpcAsset, Authority, Compression, Content, Creator, File, Group, Interface,
@@ -52,7 +52,7 @@ pub fn build_asset_response(
     limit: u64,
     grand_total: Option<u64>,
     pagination: &Pagination,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> AssetList {
     let total = assets.len() as u32;
     let (page, before, after, cursor) = match pagination {
@@ -72,7 +72,7 @@ pub fn build_asset_response(
         }
     };
 
-    let (items, errors) = asset_list_to_rpc(assets, display_options);
+    let (items, errors) = asset_list_to_rpc(assets, options);
     AssetList {
         grand_total: grand_total,
         total,
@@ -186,7 +186,7 @@ fn process_raw_fields(
 
 pub fn v1_content_from_json(
     asset_data: &asset_data::Model,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> Result<Content, DbErr> {
     // todo -> move this to the bg worker for pre processing
     let json_uri = asset_data.metadata_url.clone();
@@ -196,7 +196,7 @@ pub fn v1_content_from_json(
     let selector = &mut selector_fn;
     let chain_data_selector = &mut chain_data_selector_fn;
     let mut meta: MetadataMap = MetadataMap::new();
-    if display_options.show_raw_data {
+    if options.show_raw_data {
         let (name, symbol) = process_raw_fields(&asset_data.raw_name, &asset_data.raw_symbol);
         if let Some(name) = name {
             meta.set_item("name", name.into());
@@ -299,7 +299,7 @@ pub fn v1_content_from_json(
     });
 
     // Enrich files with CDN for images (optional).
-    if let Some(cdn_prefix) = display_options.cdn_prefix.clone() {
+    if let Some(cdn_prefix) = options.cdn_prefix.clone() {
         // Use default options for now.
         let cdn_options = "";
         files.iter_mut().for_each(|f| match (&f.uri, &f.mime) {
@@ -329,11 +329,11 @@ pub fn v1_content_from_json(
 pub fn get_content(
     asset: &asset::Model,
     data: &asset_data::Model,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> Result<Content, DbErr> {
     match asset.specification_version {
         Some(SpecificationVersions::V1) | Some(SpecificationVersions::V0) => {
-            v1_content_from_json(data, display_options)
+            v1_content_from_json(data, options)
         }
         Some(_) => Err(DbErr::Custom("Version Not Implemented".to_string())),
         None => Err(DbErr::Custom("Specification version not found".to_string())),
@@ -363,13 +363,13 @@ pub fn to_creators(creators: Vec<asset_creators::Model>) -> Vec<Creator> {
 
 pub fn to_grouping(
     groups: Vec<asset_grouping::Model>,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> Result<Vec<Group>, DbErr> {
     let result: Vec<Group> = groups
         .iter()
         .filter_map(|model| {
             // Only show verification info if requested via display options.
-            let verified = match display_options.show_unverified_collections {
+            let verified = match options.show_unverified_collections {
                 // Null verified indicates legacy data, meaning it is verified.
                 true => Some(model.verified.unwrap_or(true)),
                 false => None,
@@ -402,7 +402,7 @@ pub fn get_interface(asset: &asset::Model) -> Result<Interface, DbErr> {
 }
 
 //TODO -> impl custom error type
-pub fn asset_to_rpc(asset: FullAsset, display_options: &DisplayOptions) -> Result<RpcAsset, DbErr> {
+pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbErr> {
     let FullAsset {
         asset,
         data,
@@ -412,9 +412,9 @@ pub fn asset_to_rpc(asset: FullAsset, display_options: &DisplayOptions) -> Resul
     } = asset;
     let rpc_authorities = to_authority(authorities);
     let rpc_creators = to_creators(creators);
-    let rpc_groups = to_grouping(groups, display_options)?;
+    let rpc_groups = to_grouping(groups, options)?;
     let interface = get_interface(&asset)?;
-    let content = get_content(&asset, &data, display_options)?;
+    let content = get_content(&asset, &data, options)?;
     let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
     let chain_data_selector = &mut chain_data_selector_fn;
     let basis_points = safe_select(chain_data_selector, "$.primary_sale_happened")
@@ -494,13 +494,13 @@ pub fn asset_to_rpc(asset: FullAsset, display_options: &DisplayOptions) -> Resul
 
 pub fn asset_list_to_rpc(
     asset_list: Vec<FullAsset>,
-    display_options: &DisplayOptions,
+    options: &Options,
 ) -> (Vec<RpcAsset>, Vec<AssetError>) {
     asset_list
         .into_iter()
         .fold((vec![], vec![]), |(mut assets, mut errors), asset| {
             let id = bs58::encode(asset.asset.id.clone()).into_string();
-            match asset_to_rpc(asset, display_options) {
+            match asset_to_rpc(asset, options) {
                 Ok(rpc_asset) => assets.push(rpc_asset),
                 Err(e) => errors.push(AssetError {
                     id,
