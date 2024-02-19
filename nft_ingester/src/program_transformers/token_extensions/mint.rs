@@ -69,7 +69,6 @@ pub async fn handle_token2022_mint_account<'a, 'b, 'c>(
 }
 
 fn should_upsert_asset(m: &MintAccount) -> bool {
-    // TODO: when member extension is live, we'll need to index their group address in the collections_info
     is_token_nft(m) || m.extensions.metadata.is_some()
 }
 
@@ -226,95 +225,95 @@ async fn upsert_asset(
                 }
             }
         }
-    }
 
-    let extensions = serde_json::to_value(m.extensions.clone())
-        .map_err(|e| IngesterError::SerializatonError(e.to_string()))?;
+        let extensions = serde_json::to_value(m.extensions.clone())
+            .map_err(|e| IngesterError::SerializatonError(e.to_string()))?;
 
-    let class = match is_nft {
-        true => SpecificationAssetClass::Nft,
-        false => SpecificationAssetClass::FungibleToken,
-    };
+        let class = match is_nft {
+            true => SpecificationAssetClass::Nft,
+            false => SpecificationAssetClass::FungibleToken,
+        };
 
-    let mut asset_model = asset::ActiveModel {
-        id: Set(key_bytes.clone()),
-        owner_type: Set(owner_type),
-        supply: Set(m.account.supply as i64),
-        supply_mint: Set(Some(key_bytes.clone())),
-        specification_version: Set(Some(SpecificationVersions::V1)),
-        specification_asset_class: Set(Some(class)),
-        nonce: Set(Some(0)),
-        seq: Set(Some(0)),
-        compressed: Set(false),
-        compressible: Set(false),
-        asset_data: Set(Some(key_bytes.clone())),
-        slot_updated: Set(Some(slot)),
-        burnt: Set(false),
-        mint_extensions: Set(Some(extensions)),
-        ..Default::default()
-    };
-
-    let auth_address: Option<Vec<u8>> = m.extensions.metadata.clone().and_then(|m| {
-        let auth_pubkey: Option<Pubkey> = m.update_authority.into();
-        auth_pubkey.map(|value| value.to_bytes().to_vec())
-    });
-
-    if let Some(authority) = auth_address {
-        let model = asset_authority::ActiveModel {
-            asset_id: Set(key_bytes.clone()),
-            authority: Set(authority),
-            seq: Set(0),
-            slot_updated: Set(slot),
+        let mut asset_model = asset::ActiveModel {
+            id: Set(key_bytes.clone()),
+            owner_type: Set(owner_type),
+            supply: Set(m.account.supply as i64),
+            supply_mint: Set(Some(key_bytes.clone())),
+            specification_version: Set(Some(SpecificationVersions::V1)),
+            specification_asset_class: Set(Some(class)),
+            nonce: Set(Some(0)),
+            seq: Set(Some(0)),
+            compressed: Set(false),
+            compressible: Set(false),
+            asset_data: Set(Some(key_bytes.clone())),
+            slot_updated: Set(Some(slot)),
+            burnt: Set(false),
+            mint_extensions: Set(Some(extensions)),
             ..Default::default()
         };
 
-        let mut query = asset_authority::Entity::insert(model)
+        let auth_address: Option<Vec<u8>> = m.extensions.metadata.clone().and_then(|m| {
+            let auth_pubkey: Option<Pubkey> = m.update_authority.into();
+            auth_pubkey.map(|value| value.to_bytes().to_vec())
+        });
+
+        if let Some(authority) = auth_address {
+            let model = asset_authority::ActiveModel {
+                asset_id: Set(key_bytes.clone()),
+                authority: Set(authority),
+                seq: Set(0),
+                slot_updated: Set(slot),
+                ..Default::default()
+            };
+
+            let mut query = asset_authority::Entity::insert(model)
+                .on_conflict(
+                    OnConflict::columns([asset_authority::Column::AssetId])
+                        .update_columns([
+                            asset_authority::Column::Authority,
+                            asset_authority::Column::Seq,
+                            asset_authority::Column::SlotUpdated,
+                        ])
+                        .to_owned(),
+                )
+                .build(DbBackend::Postgres);
+            query.sql = format!(
+                "{} WHERE excluded.slot_updated > asset_authority.slot_updated",
+                query.sql
+            );
+            txn.execute(query)
+                .await
+                .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+        }
+
+        let mut asset_query = asset::Entity::insert(asset_model)
             .on_conflict(
-                OnConflict::columns([asset_authority::Column::AssetId])
-                    .update_columns([
-                        asset_authority::Column::Authority,
-                        asset_authority::Column::Seq,
-                        asset_authority::Column::SlotUpdated,
+                OnConflict::columns([asset::Column::Id])
+                    .update_columns(vec![
+                        asset::Column::OwnerType,
+                        asset::Column::Supply,
+                        asset::Column::SupplyMint,
+                        asset::Column::SpecificationVersion,
+                        asset::Column::SpecificationAssetClass,
+                        asset::Column::Nonce,
+                        asset::Column::Seq,
+                        asset::Column::Compressed,
+                        asset::Column::Compressible,
+                        asset::Column::AssetData,
+                        asset::Column::SlotUpdated,
+                        asset::Column::Burnt,
                     ])
                     .to_owned(),
             )
             .build(DbBackend::Postgres);
-        query.sql = format!(
-            "{} WHERE excluded.slot_updated > asset_authority.slot_updated",
-            query.sql
-        );
-        txn.execute(query)
-            .await
-            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-    }
-
-    let mut asset_query = asset::Entity::insert(asset_model)
-        .on_conflict(
-            OnConflict::columns([asset::Column::Id])
-                .update_columns(vec![
-                    asset::Column::OwnerType,
-                    asset::Column::Supply,
-                    asset::Column::SupplyMint,
-                    asset::Column::SpecificationVersion,
-                    asset::Column::SpecificationAssetClass,
-                    asset::Column::Nonce,
-                    asset::Column::Seq,
-                    asset::Column::Compressed,
-                    asset::Column::Compressible,
-                    asset::Column::AssetData,
-                    asset::Column::SlotUpdated,
-                    asset::Column::Burnt,
-                ])
-                .to_owned(),
-        )
-        .build(DbBackend::Postgres);
-    asset_query.sql = format!(
+        asset_query.sql = format!(
         "{} WHERE excluded.slot_updated_mint_account >= asset.slot_updated_mint_account OR asset.slot_updated_mint_account IS NULL",
         asset_query.sql
     );
-    txn.execute(asset_query)
-        .await
-        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+        txn.execute(asset_query)
+            .await
+            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+    }
     Ok(())
 }
 
