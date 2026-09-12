@@ -1,11 +1,13 @@
 use blockbuster::{
     self,
     instruction::InstructionBundle,
-    programs::bubblegum::{BubblegumInstruction, InstructionName, UseMethod as BubblegumUseMethod},
+    programs::bubblegum::{BubblegumInstruction, InstructionName, LeafSchema},
     token_metadata::types::UseMethod as TokenMetadataUseMethod,
 };
-use log::{debug, info};
+use log::{debug, info, warn};
+use mpl_bubblegum::types::UseMethod as BubblegumUseMethod;
 use sea_orm::{ConnectionTrait, TransactionTrait};
+use solana_sdk::pubkey::Pubkey;
 use tokio::sync::mpsc::UnboundedSender;
 
 mod burn;
@@ -14,28 +16,28 @@ mod collection_verification;
 mod creator_verification;
 mod db;
 mod delegate;
-mod mint_v1;
+mod mint;
 mod redeem;
 mod transfer;
 mod update_metadata;
 
 pub use db::*;
 
-use crate::{error::IngesterError, tasks::TaskData};
+use crate::{config::IngesterConfig, error::IngesterError, tasks::TaskData};
 
 pub async fn handle_bubblegum_instruction<'c, T>(
+    config: &'c IngesterConfig,
     parsing_result: &'c BubblegumInstruction,
     bundle: &'c InstructionBundle<'c>,
-    txn: &T,
+    txn_or_conn: &T,
     task_manager: &UnboundedSender<TaskData>,
-    cl_audits: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
     let ix_type = &parsing_result.instruction;
 
-    // @TODO this would be much better served by implemneting Debug trait on the InstructionName
+    // @TODO this would be much better served by implementing Debug trait on the InstructionName
     // or wrapping it into something that can display it more neatly.
     let ix_str = match ix_type {
         InstructionName::Unknown => "Unknown",
@@ -54,54 +56,91 @@ where
         InstructionName::VerifyCollection => "VerifyCollection",
         InstructionName::UnverifyCollection => "UnverifyCollection",
         InstructionName::SetAndVerifyCollection => "SetAndVerifyCollection",
-        InstructionName::SetDecompressibleState => "SetDecompressibleState",
         InstructionName::UpdateMetadata => "UpdateMetadata",
+        InstructionName::SetDecompressibleState => "SetDecompressibleState",
+        InstructionName::BurnV2 => "BurnV2",
+        InstructionName::CollectV2 => "CollectV2",
+        InstructionName::DelegateV2 => "DelegateV2",
+        InstructionName::DelegateAndFreezeV2 => "DelegateAndFreezeV2",
+        InstructionName::FreezeV2 => "FreezeV2",
+        InstructionName::MintV2 => "MintV2",
+        InstructionName::SetCollectionV2 => "SetCollectionV2",
+        InstructionName::SetNonTransferableV2 => "SetNonTransferableV2",
+        InstructionName::ThawV2 => "ThawV2",
+        InstructionName::ThawAndRevokeV2 => "ThawAndRevokeV2",
+        InstructionName::TransferV2 => "TransferV2",
+        InstructionName::UnverifyCreatorV2 => "UnverifyCreatorV2",
+        InstructionName::VerifyCreatorV2 => "VerifyCreatorV2",
+        InstructionName::UpdateMetadataV2 => "UpdateMetadataV2",
+        InstructionName::UpdateAssetDataV2 => "UpdateAssetDataV2",
+        InstructionName::CreateTreeV2 => "CreateTreeV2",
     };
     info!("BGUM instruction txn={:?}: {:?}", ix_str, bundle.txn_id);
 
     match ix_type {
-        InstructionName::Transfer => {
-            transfer::transfer(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+        InstructionName::Transfer | InstructionName::TransferV2 => {
+            transfer::transfer(config, parsing_result, bundle, txn_or_conn, ix_str).await?;
         }
-        InstructionName::Burn => {
-            burn::burn(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+        InstructionName::Burn | InstructionName::BurnV2 => {
+            burn::burn(config, parsing_result, bundle, txn_or_conn, ix_str).await?;
         }
-        InstructionName::Delegate => {
-            delegate::delegate(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+        InstructionName::Delegate
+        | InstructionName::DelegateV2
+        | InstructionName::DelegateAndFreezeV2
+        | InstructionName::FreezeV2
+        | InstructionName::SetNonTransferableV2
+        | InstructionName::ThawV2
+        | InstructionName::ThawAndRevokeV2 => {
+            delegate::delegate(config, parsing_result, bundle, txn_or_conn, ix_str).await?;
         }
-        InstructionName::MintV1 | InstructionName::MintToCollectionV1 => {
-            let task = mint_v1::mint_v1(parsing_result, bundle, txn, ix_str, cl_audits).await?;
-
-            if let Some(t) = task {
-                task_manager.send(t)?;
+        InstructionName::MintV1 | InstructionName::MintToCollectionV1 | InstructionName::MintV2 => {
+            match mint::mint(parsing_result, bundle, txn_or_conn, ix_str).await? {
+                Some(task) => {
+                    task_manager.send(task)?;
+                }
+                None => {
+                    warn!(
+                        "HELIUM Mint operation returned None for instruction: {:?}, bundle slot: {}, txn: {}",
+                        ix_str,
+                        bundle.slot,
+                        bundle.txn_id
+                    );
+                }
             }
         }
         InstructionName::Redeem => {
-            redeem::redeem(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+            redeem::redeem(config, parsing_result, bundle, txn_or_conn, ix_str).await?;
         }
         InstructionName::CancelRedeem => {
-            cancel_redeem::cancel_redeem(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+            cancel_redeem::cancel_redeem(config, parsing_result, bundle, txn_or_conn, ix_str)
+                .await?;
         }
         InstructionName::DecompressV1 => {
-            debug!("No action necessary for decompression")
+            // decompress::decompress(parsing_result, bundle, txn).await?;
+            // Take no action. We rely on the account indexing to handle the "decompression".
+            // It will overwrite everything.
         }
-        InstructionName::VerifyCreator | InstructionName::UnverifyCreator => {
-            creator_verification::process(parsing_result, bundle, txn, ix_str, cl_audits).await?;
+        InstructionName::VerifyCreator
+        | InstructionName::UnverifyCreator
+        | InstructionName::VerifyCreatorV2
+        | InstructionName::UnverifyCreatorV2 => {
+            creator_verification::process(config, parsing_result, bundle, txn_or_conn, ix_str)
+                .await?;
         }
         InstructionName::VerifyCollection
         | InstructionName::UnverifyCollection
-        | InstructionName::SetAndVerifyCollection => {
-            collection_verification::process(parsing_result, bundle, txn, ix_str, cl_audits)
+        | InstructionName::SetAndVerifyCollection
+        | InstructionName::SetCollectionV2 => {
+            collection_verification::process(config, parsing_result, bundle, txn_or_conn, ix_str)
                 .await?;
         }
         InstructionName::SetDecompressibleState => (), // Nothing to index.
-        InstructionName::UpdateMetadata => {
-            let task =
-                update_metadata::update_metadata(parsing_result, bundle, txn, ix_str, cl_audits)
-                    .await?;
-
-            if let Some(t) = task {
-                task_manager.send(t)?;
+        InstructionName::UpdateMetadata | InstructionName::UpdateMetadataV2 => {
+            if let Some(task) =
+                update_metadata::update_metadata(parsing_result, bundle, txn_or_conn, ix_str)
+                    .await?
+            {
+                task_manager.send(task)?;
             }
         }
         _ => debug!("Bubblegum: Not Implemented Instruction"),
@@ -124,5 +163,70 @@ const fn bgum_use_method_to_token_metadata_use_method(
         BubblegumUseMethod::Burn => TokenMetadataUseMethod::Burn,
         BubblegumUseMethod::Multiple => TokenMetadataUseMethod::Multiple,
         BubblegumUseMethod::Single => TokenMetadataUseMethod::Single,
+    }
+}
+
+/// A normalized representation of both V1 and V2 leaf schemas,
+/// providing a unified view of all fields.
+///
+/// Fields that are only present in V2 (i.e. `collection_hash`, `asset_data_hash`, `flags`)
+/// are represented as `Option`s and will be `None` when derived from a LeafSchema V1 struct.
+pub(crate) struct NormalizedLeafFields {
+    id: Pubkey,
+    owner: Pubkey,
+    delegate: Pubkey,
+    nonce: u64,
+    data_hash: [u8; 32],
+    creator_hash: [u8; 32],
+    collection_hash: Option<[u8; 32]>,
+    asset_data_hash: Option<[u8; 32]>,
+    flags: Option<u8>,
+}
+
+impl From<&LeafSchema> for NormalizedLeafFields {
+    fn from(leaf_schema: &LeafSchema) -> Self {
+        match leaf_schema {
+            LeafSchema::V1 {
+                id,
+                owner,
+                delegate,
+                nonce,
+                data_hash,
+                creator_hash,
+                ..
+            } => Self {
+                id: solana_sdk::pubkey::Pubkey::new_from_array(id.to_bytes()),
+                owner: solana_sdk::pubkey::Pubkey::new_from_array(owner.to_bytes()),
+                delegate: solana_sdk::pubkey::Pubkey::new_from_array(delegate.to_bytes()),
+                nonce: *nonce,
+                data_hash: *data_hash,
+                creator_hash: *creator_hash,
+                collection_hash: None,
+                asset_data_hash: None,
+                flags: None,
+            },
+            LeafSchema::V2 {
+                id,
+                owner,
+                delegate,
+                nonce,
+                data_hash,
+                creator_hash,
+                collection_hash,
+                asset_data_hash,
+                flags,
+                ..
+            } => Self {
+                id: solana_sdk::pubkey::Pubkey::new_from_array(id.to_bytes()),
+                owner: solana_sdk::pubkey::Pubkey::new_from_array(owner.to_bytes()),
+                delegate: solana_sdk::pubkey::Pubkey::new_from_array(delegate.to_bytes()),
+                nonce: *nonce,
+                data_hash: *data_hash,
+                creator_hash: *creator_hash,
+                collection_hash: Some(*collection_hash),
+                asset_data_hash: Some(*asset_data_hash),
+                flags: Some(*flags),
+            },
+        }
     }
 }

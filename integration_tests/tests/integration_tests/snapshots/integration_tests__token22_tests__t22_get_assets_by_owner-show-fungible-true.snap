@@ -1,0 +1,129 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 2,
+  "limit": 1000,
+  "cursor": "So11111111111111111111111111111111111111112",
+  "items": [
+    {
+      "interface": "FungibleToken",
+      "id": "6PHEpno6fuPCeraN3U1px3GxaN6FAqYx9C6Tz1axAd6K",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "",
+        "files": [],
+        "metadata": {},
+        "links": {}
+      },
+      "authorities": [],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "token",
+        "owner": "2BPEQsnGFx3sdQrW3AjXpzxtjNMZy5kokh1QUjsPN38N"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "9mnkrbd6T7nzRwp3pX6fFnwQDtYhF7TnkciodcbyghVg",
+            "balance": 467153101592839
+          }
+        ],
+        "balance": 467153101592839,
+        "supply": 467292346302206,
+        "decimals": 6,
+        "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        "associated_token_address": "9mnkrbd6T7nzRwp3pX6fFnwQDtYhF7TnkciodcbyghVg"
+      }
+    },
+    {
+      "interface": "FungibleToken",
+      "id": "So11111111111111111111111111111111111111112",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "",
+        "files": [
+          {
+            "uri": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+            "mime": "image/png"
+          }
+        ],
+        "metadata": {},
+        "links": {
+          "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+        }
+      },
+      "authorities": [],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "token",
+        "owner": "2BPEQsnGFx3sdQrW3AjXpzxtjNMZy5kokh1QUjsPN38N"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "vFBy94ZGkNpr3svH2D2b9xwx3U2pLArzrpSqzHKSdDy",
+            "balance": 1256
+          }
+        ],
+        "balance": 1256,
+        "supply": 0,
+        "decimals": 9,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "vFBy94ZGkNpr3svH2D2b9xwx3U2pLArzrpSqzHKSdDy"
+      }
+    }
+  ]
+}

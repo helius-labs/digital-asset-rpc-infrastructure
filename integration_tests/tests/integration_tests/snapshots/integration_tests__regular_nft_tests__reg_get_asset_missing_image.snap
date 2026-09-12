@@ -1,0 +1,65 @@
+---
+source: integration_tests/tests/integration_tests/regular_nft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "FungibleToken",
+  "id": "3rHYaCNoe3gxLAehDDfzpMGRdtLhBLLtRgvNYXYPtZUU",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://bafybeiardfrjl5xccyqzmjxrewzg3rslx3qwr26yijh2chakjvthe3rine.ipfs.w3s.link/homelander.jpg",
+    "files": [],
+    "metadata": {
+      "name": "TOPG TATE",
+      "symbol": "TOPGTATE",
+      "token_standard": "Fungible"
+    },
+    "links": {
+      "image": "https://bafybeiardfrjl5xccyqzmjxrewzg3rslx3qwr26yijh2chakjvthe3rine.ipfs.w3s.link/homelander.jpg"
+    }
+  },
+  "authorities": [
+    {
+      "address": "64aWaKaKvEp4NhcM3bsMSYR6mspiqf3Rz73T8bq56dWP",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "token",
+    "owner": ""
+  },
+  "supply": null,
+  "mutable": false,
+  "burnt": false,
+  "token_info": {
+    "supply": "[supply]",
+    "decimals": 9,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  }
+}

@@ -1,19 +1,19 @@
 use digital_asset_types::dao::{
     asset,
-    sea_orm_active_enums::{
-        OwnerType, RoyaltyTargetType, SpecificationAssetClass, SpecificationVersions,
-    },
+    sea_orm_active_enums::{OwnerType, RoyaltyTargetType, SpecificationAssetClass},
 };
 use sea_orm::{
     sea_query::OnConflict, ConnectionTrait, DbBackend, DbErr, EntityTrait, QueryTrait, Set,
     TransactionTrait,
 };
+use serde_json::Value;
 
 pub struct AssetTokenAccountColumns {
     pub mint: Vec<u8>,
     pub owner: Option<Vec<u8>>,
     pub frozen: bool,
     pub delegate: Option<Vec<u8>>,
+    pub token_extensions: Option<Value>,
     pub slot_updated_token_account: Option<i64>,
 }
 
@@ -26,6 +26,7 @@ pub async fn upsert_assets_token_account_columns<T: ConnectionTrait + Transactio
         owner: Set(columns.owner),
         frozen: Set(columns.frozen),
         delegate: Set(columns.delegate),
+        token_extensions: Set(columns.token_extensions),
         slot_updated_token_account: Set(columns.slot_updated_token_account),
         ..Default::default()
     };
@@ -36,6 +37,7 @@ pub async fn upsert_assets_token_account_columns<T: ConnectionTrait + Transactio
                     asset::Column::Owner,
                     asset::Column::Frozen,
                     asset::Column::Delegate,
+                    asset::Column::TokenExtensions,
                     asset::Column::SlotUpdatedTokenAccount,
                 ])
                 .to_owned(),
@@ -52,7 +54,7 @@ pub async fn upsert_assets_token_account_columns<T: ConnectionTrait + Transactio
 pub struct AssetMintAccountColumns {
     pub mint: Vec<u8>,
     pub supply: u64,
-    pub suppply_mint: Option<Vec<u8>>,
+    pub supply_mint: Option<Vec<u8>>,
     pub slot_updated_mint_account: u64,
 }
 
@@ -63,7 +65,7 @@ pub async fn upsert_assets_mint_account_columns<T: ConnectionTrait + Transaction
     let active_model = asset::ActiveModel {
         id: Set(columns.mint),
         supply: Set(columns.supply as i64),
-        supply_mint: Set(columns.suppply_mint),
+        supply_mint: Set(columns.supply_mint),
         slot_updated_mint_account: Set(Some(columns.slot_updated_mint_account as i64)),
         ..Default::default()
     };
@@ -88,11 +90,21 @@ pub async fn upsert_assets_mint_account_columns<T: ConnectionTrait + Transaction
 
 pub struct AssetMetadataAccountColumns {
     pub mint: Vec<u8>,
+    pub metadata_account_id: Vec<u8>,
     pub owner_type: OwnerType,
     pub specification_asset_class: Option<SpecificationAssetClass>,
     pub royalty_amount: i32,
     pub asset_data: Option<Vec<u8>>,
     pub slot_updated_metadata_account: u64,
+    pub mpl_core_plugins: Option<Value>,
+    pub mpl_core_unknown_plugins: Option<Value>,
+    pub mpl_core_collection_num_minted: Option<i32>,
+    pub mpl_core_collection_current_size: Option<i32>,
+    pub mpl_core_plugins_json_version: Option<i32>,
+    pub mpl_core_external_plugins: Option<Value>,
+    pub mpl_core_unknown_external_plugins: Option<Value>,
+    pub is_agent: bool,
+    pub asset_signer: Option<Vec<u8>>,
 }
 
 pub async fn upsert_assets_metadata_account_columns<T: ConnectionTrait + TransactionTrait>(
@@ -101,8 +113,11 @@ pub async fn upsert_assets_metadata_account_columns<T: ConnectionTrait + Transac
 ) -> Result<(), DbErr> {
     let active_model = asset::ActiveModel {
         id: Set(columns.mint),
+        metadata_account_id: Set(Some(columns.metadata_account_id)),
         owner_type: Set(columns.owner_type),
-        specification_version: Set(Some(SpecificationVersions::V1)),
+        specification_version: Set(Some(
+            digital_asset_types::dao::sea_orm_active_enums::SpecificationVersions::V1,
+        )),
         specification_asset_class: Set(columns.specification_asset_class),
         tree_id: Set(None),
         nonce: Set(Some(0)),
@@ -118,12 +133,22 @@ pub async fn upsert_assets_metadata_account_columns<T: ConnectionTrait + Transac
         asset_data: Set(columns.asset_data),
         slot_updated_metadata_account: Set(Some(columns.slot_updated_metadata_account as i64)),
         burnt: Set(false),
+        mpl_core_plugins: Set(columns.mpl_core_plugins),
+        mpl_core_unknown_plugins: Set(columns.mpl_core_unknown_plugins),
+        mpl_core_collection_num_minted: Set(columns.mpl_core_collection_num_minted),
+        mpl_core_collection_current_size: Set(columns.mpl_core_collection_current_size),
+        mpl_core_plugins_json_version: Set(columns.mpl_core_plugins_json_version),
+        mpl_core_external_plugins: Set(columns.mpl_core_external_plugins),
+        mpl_core_unknown_external_plugins: Set(columns.mpl_core_unknown_external_plugins),
+        is_agent: Set(columns.is_agent),
+        asset_signer: Set(columns.asset_signer),
         ..Default::default()
     };
     let mut query = asset::Entity::insert(active_model)
         .on_conflict(
             OnConflict::columns([asset::Column::Id])
                 .update_columns([
+                    asset::Column::MetadataAccountId,
                     asset::Column::OwnerType,
                     asset::Column::SpecificationVersion,
                     asset::Column::SpecificationAssetClass,
@@ -141,6 +166,15 @@ pub async fn upsert_assets_metadata_account_columns<T: ConnectionTrait + Transac
                     asset::Column::AssetData,
                     asset::Column::SlotUpdatedMetadataAccount,
                     asset::Column::Burnt,
+                    asset::Column::MplCorePlugins,
+                    asset::Column::MplCoreUnknownPlugins,
+                    asset::Column::MplCoreCollectionNumMinted,
+                    asset::Column::MplCoreCollectionCurrentSize,
+                    asset::Column::MplCorePluginsJsonVersion,
+                    asset::Column::MplCoreExternalPlugins,
+                    asset::Column::MplCoreUnknownExternalPlugins,
+                    asset::Column::IsAgent,
+                    asset::Column::AssetSigner,
                 ])
                 .to_owned(),
         )

@@ -2,19 +2,24 @@ mod master_edition;
 mod v1_asset;
 
 use crate::{
+    config::IngesterConfig,
     error::IngesterError,
     program_transformers::token_metadata::{
-        master_edition::{save_v1_master_edition, save_v2_master_edition},
+        master_edition::{save_edition, save_printable_edition},
         v1_asset::{burn_v1_asset, save_v1_asset},
     },
     tasks::TaskData,
 };
 use blockbuster::programs::token_metadata::{TokenMetadataAccountData, TokenMetadataAccountState};
+use digital_asset_types::dao::sea_orm_active_enums::EditionAccountType;
 use plerkle_serialization::AccountInfo;
-use sea_orm::{DatabaseConnection, TransactionTrait};
+use sea_orm::DatabaseConnection;
 use tokio::sync::mpsc::UnboundedSender;
 
+use self::master_edition::save_v1_edition;
+
 pub async fn handle_token_metadata_account<'a, 'b, 'c>(
+    config: &'c IngesterConfig,
     account_update: &'a AccountInfo<'a>,
     parsing_result: &'b TokenMetadataAccountState,
     db: &'c DatabaseConnection,
@@ -27,22 +32,38 @@ pub async fn handle_token_metadata_account<'a, 'b, 'c>(
             Ok(())
         }
         TokenMetadataAccountData::MasterEditionV1(m) => {
-            let txn = db.begin().await?;
-            save_v1_master_edition(key, account_update.slot(), m, &txn).await?;
-            txn.commit().await?;
+            save_v1_edition(key, account_update.slot(), m, db).await?;
             Ok(())
         }
         TokenMetadataAccountData::MetadataV1(m) => {
-            let task = save_v1_asset(db, m, account_update.slot()).await?;
-            if let Some(task) = task {
-                task_manager.send(task)?;
+            let task = save_v1_asset(config, db, m, key, account_update.slot()).await?;
+            if !config.skip_offchain.unwrap_or(false) {
+                if let Some(task) = task {
+                    task_manager.send(task)?;
+                }
             }
             Ok(())
         }
         TokenMetadataAccountData::MasterEditionV2(m) => {
-            let txn = db.begin().await?;
-            save_v2_master_edition(key, account_update.slot(), m, &txn).await?;
-            txn.commit().await?;
+            save_edition(
+                key,
+                EditionAccountType::MasterEditionV2,
+                account_update.slot(),
+                m,
+                db,
+            )
+            .await?;
+            Ok(())
+        }
+        TokenMetadataAccountData::EditionV1(e) => {
+            save_printable_edition(
+                key,
+                EditionAccountType::Edition,
+                account_update.slot(),
+                e,
+                db,
+            )
+            .await?;
             Ok(())
         }
         // TokenMetadataAccountData::EditionMarker(_) => {}

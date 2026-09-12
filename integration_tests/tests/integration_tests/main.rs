@@ -1,5 +1,17 @@
 mod account_update_tests;
+mod agent_token_tests;
+pub mod background_task_tests;
 mod cnft_tests;
+mod cnft_tests_v2_leaf_schema;
 mod common;
+mod edition_tests;
+mod fungible_tests;
 mod general_scenario_tests;
+mod get_nft_editions_tests;
+mod mpl_core_group_tests;
+mod mpl_core_tests;
+mod production_tests;
+mod publisher_tests;
 mod regular_nft_tests;
+mod token22_tests;
+mod token22_metadata_pointer_test;

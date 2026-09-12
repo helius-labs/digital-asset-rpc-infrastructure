@@ -1,3 +1,4 @@
+use std::env;
 use std::path::Path;
 
 use std::str::FromStr;
@@ -6,31 +7,35 @@ use das_api::api::DasApi;
 
 use das_api::config::Config;
 
+use digital_asset_types::dao::blocks;
 use migration::sea_orm::{
     ConnectionTrait, DatabaseConnection, ExecResult, SqlxPostgresConnector, Statement,
 };
 use migration::{Migrator, MigratorTrait};
-use mpl_token_metadata::accounts::Metadata;
 
-use nft_ingester::config::{self, rand_string};
-use nft_ingester::program_transformers::ProgramTransformer;
-use nft_ingester::tasks::TaskManager;
+use mpl_token_metadata::accounts::{MasterEdition, Metadata};
+use nft_ingester::config;
+use nft_ingester::tasks::TaskData;
+use nft_ingester::{config::IngesterConfig, program_transformers::ProgramTransformer};
 use once_cell::sync::Lazy;
 use plerkle_serialization::root_as_account_info;
 use plerkle_serialization::root_as_transaction_info;
 use plerkle_serialization::serializer::serialize_account;
 use plerkle_serialization::solana_geyser_plugin_interface_shims::ReplicaAccountInfoV2;
 
+use sea_orm::{EntityTrait, Set};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use solana_system_interface;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 use std::sync::Arc;
+use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::Mutex;
 
-use futures_util::StreamExt as FuturesStreamExt;
 use futures_util::TryStreamExt;
+use futures_util::{StreamExt as FuturesStreamExt, TryFutureExt};
 use tokio_stream::{self as stream};
 
 use log::{error, info};
@@ -45,12 +50,10 @@ use solana_client::{
     rpc_request::RpcRequest,
     rpc_response::{Response as RpcResponse, RpcTokenAccountBalance},
 };
-use solana_sdk::{
-    account::Account,
-    commitment_config::{CommitmentConfig, CommitmentLevel},
-};
+use solana_commitment_config::{CommitmentConfig, CommitmentLevel};
+use solana_sdk::account::Account;
 use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
-use std::{fmt, time::Duration};
+use std::time::Duration;
 
 use std::path::PathBuf;
 
@@ -64,6 +67,9 @@ pub struct TestSetup {
     pub db: Arc<DatabaseConnection>,
     pub transformer: ProgramTransformer,
     pub das_api: DasApi,
+    pub config: IngesterConfig,
+    #[allow(unused)]
+    pub task_receiver: tokio::sync::mpsc::UnboundedReceiver<TaskData>,
 }
 
 impl TestSetup {
@@ -76,24 +82,34 @@ impl TestSetup {
         let mut database_config = config::DatabaseConfig::new();
         database_config.insert("database_url".to_string(), database_test_url.clone().into());
 
+        let ingester_config: IngesterConfig = IngesterConfig {
+            database_config,
+            ..IngesterConfig::default()
+        };
+
         if !(database_test_url.contains("localhost") || database_test_url.contains("127.0.0.1")) {
             panic!("Tests can only be run on a local database");
         }
 
         let pool = setup_pg_pool(database_test_url.clone()).await;
         let db = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
-        let transformer = load_ingest_program_transformer(pool.clone()).await;
+
+        let (task_sender, task_receiver) = unbounded_channel::<TaskData>();
+        let transformer =
+            ProgramTransformer::new(pool.clone(), task_sender, ingester_config.clone());
 
         let rpc_url = match opts.network.unwrap_or_default() {
             Network::Mainnet => std::env::var("MAINNET_RPC_URL").unwrap(),
             Network::Devnet => std::env::var("DEVNET_RPC_URL").unwrap(),
         };
-        let client = RpcClient::new(rpc_url.to_string());
 
         let das_api_config: Config = das_api::config::Config {
-            database_url: database_test_url.to_string(),
+            database_urls: Some(database_test_url.to_string()),
+            rpc_url: rpc_url.clone(),
             ..Default::default()
         };
+        let client = RpcClient::new(rpc_url.to_string());
+
         let das_api = das_api::api::DasApi::from_config(das_api_config)
             .await
             .unwrap();
@@ -104,6 +120,8 @@ impl TestSetup {
             db: Arc::new(db),
             transformer,
             das_api,
+            config: ingester_config,
+            task_receiver,
         }
     }
 }
@@ -133,12 +151,37 @@ pub async fn truncate_table(
 
 static INIT: Lazy<Mutex<Option<()>>> = Lazy::new(|| Mutex::new(None));
 
+pub fn setup_logging() {
+    let env_filter = env::var("RUST_LOG").unwrap_or("info,sqlx=error".to_string());
+    tracing_subscriber::fmt()
+        .with_test_writer()
+        .with_env_filter(env_filter)
+        .init();
+}
+
+// HACK: Add a single row to the blocks table so that the last_indexed_slot is not empty
+async fn add_single_row_to_blocks_table(db: Arc<DatabaseConnection>) {
+    blocks::Entity::insert(blocks::ActiveModel {
+        slot: Set(1),
+        parent_slot: Set(0),
+        block_time: Set(1),
+        blockhash: Set(vec![1]),
+        parent_blockhash: Set(vec![1]),
+        block_height: Set(1),
+    })
+    .exec(db.as_ref())
+    .await
+    .unwrap();
+}
+
 pub async fn apply_migrations_and_delete_data(db: Arc<DatabaseConnection>) {
     let mut init = INIT.lock().await;
     if init.is_none() {
         std::env::set_var("INIT_FILE_PATH", "../init.sql");
         Migrator::fresh(&db).await.unwrap();
         *init = Some(());
+        setup_logging();
+        add_single_row_to_blocks_table(db.clone()).await;
         // Mutex will dropped once it goes out of scope.
         return;
     }
@@ -157,14 +200,7 @@ pub async fn apply_migrations_and_delete_data(db: Arc<DatabaseConnection>) {
         .try_collect::<Vec<ExecResult>>()
         .await
         .unwrap();
-}
-
-async fn load_ingest_program_transformer(pool: sqlx::Pool<sqlx::Postgres>) -> ProgramTransformer {
-    // HACK: We don't really use this background task handler but we need it to create the sender
-    let mut background_task_manager = TaskManager::new(rand_string(), pool.clone(), vec![]);
-    background_task_manager.start_listener(true);
-    let bg_task_sender = background_task_manager.get_sender().unwrap();
-    ProgramTransformer::new(pool, bg_task_sender, false)
+    add_single_row_to_blocks_table(db.clone()).await;
 }
 
 pub async fn get_transaction(
@@ -180,7 +216,7 @@ pub async fn get_transaction(
         commitment: Some(CommitmentConfig {
             commitment: CommitmentLevel::Confirmed,
         }),
-        max_supported_transaction_version: Some(0),
+        max_supported_transaction_version: Some(1),
     };
 
     loop {
@@ -212,7 +248,7 @@ pub async fn fetch_and_serialize_transaction(
 ) -> anyhow::Result<Option<Vec<u8>>> {
     let max_retries = 5;
     let tx: EncodedConfirmedTransactionWithStatusMeta =
-        get_transaction(client, sig, max_retries).await?;
+        get_transaction(&client, sig, max_retries).await?;
 
     // Ignore if tx failed or meta is missed
     let meta = tx.transaction.meta.as_ref();
@@ -237,7 +273,7 @@ pub async fn rpc_tx_with_retries<T, E>(
 ) -> RpcClientResult<T>
 where
     T: DeserializeOwned,
-    E: fmt::Debug,
+    E: std::fmt::Debug,
 {
     let mut retries = 0;
     let mut delay = Duration::from_millis(500);
@@ -283,11 +319,23 @@ pub async fn fetch_account(
 
     let account: Account = response
         .value
-        .ok_or_else(|| anyhow::anyhow!("failed to get account {pubkey}"))?
-        .decode()
-        .ok_or_else(|| anyhow::anyhow!("failed to parse account {pubkey}"))?;
+        .ok_or_else(|| anyhow::anyhow!("failed to get account {pubkey}"))
+        .and_then(|ui_account| {
+            decode_ui_account(ui_account)
+                .ok_or_else(|| anyhow::anyhow!("failed to parse account {pubkey}"))
+        })?;
 
     Ok((account, response.context.slot))
+}
+
+fn decode_ui_account(ui_account: UiAccount) -> Option<Account> {
+    Some(Account {
+        lamports: ui_account.lamports,
+        data: ui_account.data.decode()?,
+        owner: Pubkey::from_str(&ui_account.owner).ok()?,
+        executable: ui_account.executable,
+        rent_epoch: ui_account.rent_epoch,
+    })
 }
 
 pub async fn fetch_and_serialize_account(
@@ -297,7 +345,7 @@ pub async fn fetch_and_serialize_account(
 ) -> anyhow::Result<Vec<u8>> {
     let max_retries = 5;
 
-    let fetch_result = fetch_account(pubkey, client, max_retries).await;
+    let fetch_result = fetch_account(pubkey, &client, max_retries).await;
 
     let (account, actual_slot) = match fetch_result {
         Ok((account, actual_slot)) => (account, actual_slot),
@@ -355,14 +403,22 @@ pub async fn get_token_largest_account(client: &RpcClient, mint: Pubkey) -> anyh
     }
 }
 
-pub async fn index_account_bytes(setup: &TestSetup, account_bytes: Vec<u8>) {
+pub async fn index_account_bytes(
+    setup: &TestSetup,
+    account_bytes: Vec<u8>,
+    account_pubkey: Pubkey,
+) {
     let account = root_as_account_info(&account_bytes).unwrap();
 
     setup
         .transformer
-        .handle_account_update(account)
+        .handle_account_update(account, &setup.config)
+        .map_err(|e| {
+            error!("Failed to index account: {:?} {:?}", account_pubkey, e);
+            e
+        })
         .await
-        .unwrap();
+        .unwrap()
 }
 
 pub async fn cached_fetch_account(
@@ -389,7 +445,7 @@ async fn cached_fetch_account_with_error_handling(
     if !Path::new(&dir).exists() {
         std::fs::create_dir(&dir).unwrap();
     }
-    let file_path = dir.join(format!("{}", account));
+    let file_path = dir.join(account.to_string());
 
     if file_path.exists() {
         Ok(std::fs::read(file_path).unwrap())
@@ -400,13 +456,13 @@ async fn cached_fetch_account_with_error_handling(
     }
 }
 
-async fn cached_fetch_transaction(setup: &TestSetup, sig: Signature) -> Vec<u8> {
+pub async fn cached_fetch_transaction(setup: &TestSetup, sig: Signature) -> Vec<u8> {
     let dir = get_relative_project_path(&format!("tests/data/transactions/{}", setup.name));
 
     if !Path::new(&dir).exists() {
         std::fs::create_dir(&dir).unwrap();
     }
-    let file_path = dir.join(format!("{}", sig));
+    let file_path = dir.join(sig.to_string());
 
     if file_path.exists() {
         std::fs::read(file_path).unwrap()
@@ -426,13 +482,16 @@ pub async fn index_transaction(setup: &TestSetup, sig: Signature) {
     setup.transformer.handle_transaction(&txn).await.unwrap();
 }
 
-async fn cached_fetch_largest_token_account_id(client: &RpcClient, mint: Pubkey) -> Pubkey {
-    let dir = get_relative_project_path(&format!("tests/data/largest_token_account_ids/{}", mint));
+pub async fn cached_fetch_largest_token_account_id(client: &RpcClient, mint: Pubkey) -> Pubkey {
+    let dir = get_relative_project_path(&format!(
+        "tests/data/largest_token_account_ids/{}",
+        mint.to_string()
+    ));
 
     if !Path::new(&dir).exists() {
         std::fs::create_dir(&dir).unwrap();
     }
-    let file_path = dir.join(format!("{}", mint));
+    let file_path = dir.join(mint.to_string());
 
     if file_path.exists() {
         Pubkey::try_from(std::fs::read(file_path).unwrap()).unwrap()
@@ -443,13 +502,13 @@ async fn cached_fetch_largest_token_account_id(client: &RpcClient, mint: Pubkey)
     }
 }
 
-#[allow(unused)]
 #[derive(Clone, Copy, Debug)]
 pub enum SeedEvent {
     Account(Pubkey),
     Nft(Pubkey),
-    TokenMint(Pubkey),
+    TokenMint((Pubkey, bool)),
     Signature(Signature),
+    EditionNft(Pubkey),
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -477,14 +536,16 @@ pub async fn index_seed_events(setup: &TestSetup, events: Vec<&SeedEvent>) {
             SeedEvent::Signature(sig) => {
                 index_transaction(setup, *sig).await;
             }
-            SeedEvent::TokenMint(mint) => {
-                index_token_mint(setup, *mint).await;
+            SeedEvent::TokenMint((mint, index_largest)) => {
+                index_token_mint(setup, *mint, *index_largest).await;
+            }
+            SeedEvent::EditionNft(mint) => {
+                index_metadata_edition_mint(setup, *mint).await;
             }
         }
     }
 }
 
-#[allow(unused)]
 pub fn seed_account(str: &str) -> SeedEvent {
     SeedEvent::Account(Pubkey::from_str(str).unwrap())
 }
@@ -493,13 +554,20 @@ pub fn seed_nft(str: &str) -> SeedEvent {
     SeedEvent::Nft(Pubkey::from_str(str).unwrap())
 }
 
-#[allow(unused)]
 pub fn seed_token_mint(str: &str) -> SeedEvent {
-    SeedEvent::TokenMint(Pubkey::from_str(str).unwrap())
+    seed_token_mint_with_options(str, true)
+}
+
+pub fn seed_token_mint_with_options(str: &str, index_largest: bool) -> SeedEvent {
+    SeedEvent::TokenMint((Pubkey::from_str(str).unwrap(), index_largest))
 }
 
 pub fn seed_txn(str: &str) -> SeedEvent {
     SeedEvent::Signature(Signature::from_str(str).unwrap())
+}
+
+pub fn seed_edition_nft(str: &str) -> SeedEvent {
+    SeedEvent::EditionNft(Pubkey::from_str(str).unwrap())
 }
 
 pub fn seed_txns<I>(strs: I) -> Vec<SeedEvent>
@@ -510,7 +578,6 @@ where
     strs.into_iter().map(|s| seed_txn(s.as_ref())).collect()
 }
 
-#[allow(unused)]
 pub fn seed_accounts<I>(strs: I) -> Vec<SeedEvent>
 where
     I: IntoIterator,
@@ -527,7 +594,6 @@ where
     strs.into_iter().map(|s| seed_nft(s.as_ref())).collect()
 }
 
-#[allow(unused)]
 pub fn seed_token_mints<I>(strs: I) -> Vec<SeedEvent>
 where
     I: IntoIterator,
@@ -538,13 +604,23 @@ where
         .collect()
 }
 
+pub fn seed_edition_nfts<I>(strs: I) -> Vec<SeedEvent>
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+{
+    strs.into_iter()
+        .map(|s| seed_edition_nft(s.as_ref()))
+        .collect()
+}
+
 pub async fn index_account(setup: &TestSetup, account: Pubkey) {
     // If we used different slots for accounts, then it becomes harder to test updates of related
     // accounts because we need to factor the fact that some updates can be disregarded because
     // they are "stale".
     let slot = Some(DEFAULT_SLOT);
     let account_bytes = cached_fetch_account(setup, account, slot).await;
-    index_account_bytes(setup, account_bytes).await;
+    index_account_bytes(setup, account_bytes, account).await;
 }
 
 #[derive(Clone, Copy)]
@@ -567,13 +643,16 @@ pub async fn get_nft_accounts(setup: &TestSetup, mint: Pubkey) -> NftAccounts {
 async fn index_account_with_ordered_slot(setup: &TestSetup, account: Pubkey) {
     let slot = None;
     let account_bytes = cached_fetch_account(setup, account, slot).await;
-    index_account_bytes(setup, account_bytes).await;
+    index_account_bytes(setup, account_bytes, account).await;
 }
 
-async fn index_token_mint(setup: &TestSetup, mint: Pubkey) {
-    let token_account = cached_fetch_largest_token_account_id(&setup.client, mint).await;
+async fn index_token_mint(setup: &TestSetup, mint: Pubkey, index_largest: bool) {
     index_account(setup, mint).await;
-    index_account(setup, token_account).await;
+
+    if index_largest {
+        let token_account = cached_fetch_largest_token_account_id(&setup.client, mint).await;
+        index_account(setup, token_account).await;
+    }
 
     // If we used different slots for accounts, then it becomes harder to test updates of related
     // accounts because we need to factor the fact that some updates can be disregarded because
@@ -581,12 +660,35 @@ async fn index_token_mint(setup: &TestSetup, mint: Pubkey) {
     let slot = Some(1);
     let metadata_account = Metadata::find_pda(&mint).0;
     match cached_fetch_account_with_error_handling(setup, metadata_account, slot).await {
+        Ok(account_bytes) => index_account_bytes(setup, account_bytes, metadata_account).await,
+        Err(_) => {
+            // If we can't find the metadata account, then we assume that the mint is not an NFT.
+        }
+    }
+}
+
+async fn index_metadata_edition_mint(setup: &TestSetup, mint: Pubkey) {
+    let token_account = cached_fetch_largest_token_account_id(&setup.client, mint).await;
+    index_account(setup, mint).await;
+    index_account(setup, token_account).await;
+
+    let slot = Some(1);
+    let metadata_account = Metadata::find_pda(&mint).0;
+    match cached_fetch_account_with_error_handling(setup, metadata_account, slot).await {
         Ok(account_bytes) => {
-            index_account_bytes(setup, account_bytes).await;
+            index_account_bytes(setup, account_bytes, metadata_account).await;
         }
         Err(_) => {
             // If we can't find the metadata account, then we assume that the mint is not an NFT.
         }
+    }
+
+    let edition_account = MasterEdition::find_pda(&mint).0;
+    match cached_fetch_account_with_error_handling(setup, edition_account, slot).await {
+        Ok(account_bytes) => {
+            index_account_bytes(setup, account_bytes, edition_account).await;
+        }
+        Err(_) => {}
     }
 }
 
@@ -600,6 +702,31 @@ pub async fn index_nft_accounts(setup: &TestSetup, nft_accounts: NftAccounts) {
     }
 }
 
+pub async fn index_account_burn(setup: &TestSetup, pubkey: Pubkey, slot: u64) {
+    let account_burn = ReplicaAccountInfoV2 {
+        pubkey: &pubkey.to_bytes(),
+        lamports: 0,
+        owner: &solana_system_interface::program::id().to_bytes(),
+        executable: false,
+        rent_epoch: 0,
+        data: &[],
+        write_version: 0,
+        txn_signature: None,
+    };
+    let fbb = serialize_account(
+        flatbuffers::FlatBufferBuilder::new(),
+        &account_burn,
+        slot,
+        false,
+    );
+    index_account_bytes(setup, fbb.finished_data().to_vec(), pubkey).await
+}
+
 pub fn trim_test_name(name: &str) -> String {
     name.replace("test_", "")
+}
+
+pub fn get_max_slot() -> u64 {
+    // If you use any larger slot, you'll encounter overflow behavior.
+    u64::MAX / 2
 }

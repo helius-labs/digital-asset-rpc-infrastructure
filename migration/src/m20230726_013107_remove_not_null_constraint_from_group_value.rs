@@ -11,7 +11,7 @@ impl MigrationTrait for Migration {
         manager
             .alter_table(
                 sea_query::Table::alter()
-                    .table(AssetGrouping::Table)
+                    .table(Alias::new("asset_grouping"))
                     .modify_column(ColumnDef::new(AssetGrouping::GroupValue).null())
                     .to_owned(),
             )
@@ -26,7 +26,7 @@ impl MigrationTrait for Migration {
         manager
             .alter_table(
                 sea_query::Table::alter()
-                    .table(AssetGrouping::Table)
+                    .table(Alias::new("asset_grouping"))
                     .modify_column(ColumnDef::new(AssetGrouping::GroupValue).not_null())
                     .to_owned(),
             )

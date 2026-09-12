@@ -1,0 +1,63 @@
+---
+source: integration_tests/tests/integration_tests/regular_nft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "FungibleToken",
+  "id": "CTg3ZgYx79zrE1MteDVkmkcGniiFrK1hJ6yiabropump",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://ipfs.io/ipfs/QmcfByXxkZZXMX6NyfmxvxQMpd1rsPCx8mXkPKe6Ywgpqy",
+    "files": [],
+    "metadata": {
+      "name": "Neiro",
+      "symbol": "NEIRO",
+      "token_standard": "Fungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "token",
+    "owner": ""
+  },
+  "supply": null,
+  "mutable": false,
+  "burnt": false,
+  "token_info": {
+    "supply": "[supply]",
+    "decimals": 6,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  }
+}

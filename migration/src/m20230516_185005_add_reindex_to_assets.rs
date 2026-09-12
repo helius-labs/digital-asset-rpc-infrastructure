@@ -12,7 +12,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 sea_query::Table::alter()
                     .table(AssetData::Table)
-                    .add_column(ColumnDef::new(AssetData::Reindex).boolean().default(false))
+                    .add_column(
+                        ColumnDef::new(Alias::new("reindex"))
+                            .boolean()
+                            .default(false),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -24,7 +28,7 @@ impl MigrationTrait for Migration {
             .alter_table(
                 sea_query::Table::alter()
                     .table(AssetData::Table)
-                    .drop_column(AssetData::Reindex)
+                    .drop_column(Alias::new("reindex"))
                     .to_owned(),
             )
             .await?;

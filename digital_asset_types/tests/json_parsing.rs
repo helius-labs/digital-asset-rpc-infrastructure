@@ -1,25 +1,31 @@
 #[cfg(test)]
 use blockbuster::token_metadata::types::TokenStandard as TSBlockbuster;
-use digital_asset_types::dao::asset_data;
-use digital_asset_types::dao::sea_orm_active_enums::{ChainMutability, Mutability};
+use digital_asset_types::dao::sea_orm_active_enums::ChainMutability;
+use digital_asset_types::dao::AssetMetadata;
 use digital_asset_types::dapi::common::v1_content_from_json;
 use digital_asset_types::json::ChainDataV1;
+use digital_asset_types::rpc::options::Options;
 use digital_asset_types::rpc::Content;
 use digital_asset_types::rpc::File;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 
 pub async fn load_test_json(file_name: &str) -> serde_json::Value {
-    let json = tokio::fs::read_to_string(format!("tools/data/{}", file_name))
+    let json = tokio::fs::read_to_string(format!("tests/data/{}", file_name))
         .await
         .unwrap();
     serde_json::from_str(&json).unwrap()
 }
 
-pub async fn parse_onchain_json(json: serde_json::Value) -> Content {
-    let asset_data = asset_data::Model {
+pub async fn parse_onchain_json(
+    json: serde_json::Value,
+    cdn_prefix: Option<String>,
+    raw_data: Option<bool>,
+) -> Content {
+    let asset_metadata = AssetMetadata {
         id: Keypair::new().pubkey().to_bytes().to_vec(),
-        chain_data_mutability: ChainMutability::Mutable,
+        metadata_url: String::from("some url"),
+        chain_mutability: ChainMutability::Mutable,
         chain_data: serde_json::to_value(ChainDataV1 {
             name: String::from("Handalf"),
             symbol: String::from(""),
@@ -29,28 +35,31 @@ pub async fn parse_onchain_json(json: serde_json::Value) -> Content {
             uses: None,
         })
         .unwrap(),
-        metadata_url: String::from("some url"),
-        metadata_mutability: Mutability::Mutable,
         metadata: json,
-        slot_updated: 0,
-        reindex: None,
-        raw_name: Some(String::from("Handalf").into_bytes().to_vec()),
-        raw_symbol: Some(String::from("").into_bytes().to_vec()),
-        base_info_seq: Some(0),
+        raw_name: Some(String::from("Handalf  ").into_bytes().to_vec()),
+        raw_symbol: Some(String::from("  ").into_bytes().to_vec()),
     };
 
-    v1_content_from_json(&asset_data).unwrap()
+    let mut options = Options::default();
+    options.cdn_prefix = cdn_prefix;
+    if let Some(rd) = raw_data {
+        options.show_raw_data = rd;
+    }
+
+    v1_content_from_json(&asset_metadata, &options).unwrap()
 }
 
 #[tokio::test]
 async fn simple_content() {
+    let cdn_prefix = None;
     let j = load_test_json("mad_lad.json").await;
-    let parsed = parse_onchain_json(j.clone()).await;
+    let mut parsed = parse_onchain_json(j.clone(), cdn_prefix.clone(), Some(true)).await;
     assert_eq!(
         parsed.files,
         Some(vec![
             File {
                 uri: Some("https://madlads.s3.us-west-2.amazonaws.com/images/1.png".to_string()),
+                cdn_uri: None,
                 mime: Some("image/png".to_string()),
                 quality: None,
                 contexts: None,
@@ -60,12 +69,57 @@ async fn simple_content() {
                     "https://arweave.net/qJ5B6fx5hEt4P7XbicbJQRyTcbyLaV-OQNA1KjzdqOQ/1.png"
                         .to_string(),
                 ),
+                cdn_uri: None,
                 mime: Some("image/png".to_string()),
                 quality: None,
                 contexts: None,
             }
         ])
     );
+
+    match parsed.metadata.get_item("name") {
+        Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf  "),
+        _ => panic!("name key not found or not a string"),
+    }
+
+    match parsed.metadata.get_item("symbol") {
+        Some(serde_json::Value::String(symbol)) => assert_eq!(symbol, "  "),
+        _ => panic!("symbol key not found or not a string"),
+    }
+
+    match parsed.metadata.get_item("json_name") {
+        Some(serde_json::Value::String(json_name)) => assert_eq!(json_name, "Mad Lads #1"),
+        _ => panic!("json_name key not found or not a string"),
+    }
+
+    parsed = parse_onchain_json(j.clone(), cdn_prefix.clone(), Some(false)).await;
+
+    match parsed.metadata.get_item("name") {
+        Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf"),
+        _ => panic!("name key not found or not a string"),
+    }
+
+    match parsed.metadata.get_item("symbol") {
+        Some(serde_json::Value::String(symbol)) => assert_eq!(symbol, ""),
+        _ => panic!("symbol key not found or not a string"),
+    }
+
+    match parsed.metadata.get_item("json_name") {
+        Some(serde_json::Value::String(json_name)) => assert_eq!(json_name, "Mad Lads #1"),
+        _ => panic!("json_name key not found or not a string"),
+    }
+
+    parsed = parse_onchain_json(j, cdn_prefix, None).await;
+
+    match parsed.metadata.get_item("name") {
+        Some(serde_json::Value::String(name)) => assert_eq!(name, "Handalf"),
+        _ => panic!("name key not found or not a string"),
+    }
+
+    match parsed.metadata.get_item("symbol") {
+        Some(serde_json::Value::String(symbol)) => assert_eq!(symbol, ""),
+        _ => panic!("symbol key not found or not a string"),
+    }
 
     assert_eq!(
         parsed
@@ -80,6 +134,7 @@ async fn simple_content() {
     );
     assert_eq!(
         parsed
+            .clone()
             .links
             .unwrap()
             .get("external_url")
@@ -91,9 +146,39 @@ async fn simple_content() {
 }
 
 #[tokio::test]
+async fn simple_content_with_cdn() {
+    let cdn_prefix = Some("https://cdn.foobar.blah".to_string());
+    let j = load_test_json("mad_lad.json").await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
+    assert_eq!(
+        parsed.files,
+        Some(vec![
+            File {
+                uri: Some("https://madlads.s3.us-west-2.amazonaws.com/images/1.png".to_string()),
+                cdn_uri: Some("https://cdn.foobar.blah//https://madlads.s3.us-west-2.amazonaws.com/images/1.png".to_string()),
+                mime: Some("image/png".to_string()),
+                quality: None,
+                contexts: None,
+            },
+            File {
+                uri: Some(
+                    "https://arweave.net/qJ5B6fx5hEt4P7XbicbJQRyTcbyLaV-OQNA1KjzdqOQ/1.png"
+                        .to_string(),
+                ),
+                cdn_uri: Some("https://cdn.foobar.blah//https://arweave.net/qJ5B6fx5hEt4P7XbicbJQRyTcbyLaV-OQNA1KjzdqOQ/1.png".to_string()),
+                mime: Some("image/png".to_string()),
+                quality: None,
+                contexts: None,
+            }
+        ])
+    );
+}
+
+#[tokio::test]
 async fn complex_content() {
+    let cdn_prefix = None;
     let j = load_test_json("infinite_fungi.json").await;
-    let parsed = parse_onchain_json(j).await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
     assert_eq!(
         parsed.files,
         Some(vec![
@@ -102,6 +187,7 @@ async fn complex_content() {
                     "https://arweave.net/_a4sXT6fOHI-5VHFOHLEF73wqKuZtJgE518Ciq9DGyI?ext=gif"
                         .to_string(),
                 ),
+                cdn_uri: None,
                 mime: Some("image/gif".to_string()),
                 quality: None,
                 contexts: None,
@@ -111,6 +197,7 @@ async fn complex_content() {
                     "https://arweave.net/HVOJ3bTpqMJJJtd5nW2575vPTekLa_SSDsQc7AqV_Ho?ext=mp4"
                         .to_string()
                 ),
+                cdn_uri: None,
                 mime: Some("video/mp4".to_string()),
                 quality: None,
                 contexts: None,
@@ -130,6 +217,7 @@ async fn complex_content() {
     );
     assert_eq!(
         parsed
+            .clone()
             .links
             .unwrap()
             .get("animation_url")
@@ -138,4 +226,36 @@ async fn complex_content() {
             .unwrap(),
         "https://arweave.net/HVOJ3bTpqMJJJtd5nW2575vPTekLa_SSDsQc7AqV_Ho?ext=mp4"
     );
+}
+
+#[tokio::test]
+async fn complex_content_with_cdn() {
+    let cdn_prefix = Some("https://cdn.foobar.blah".to_string());
+    let j = load_test_json("infinite_fungi.json").await;
+    let parsed = parse_onchain_json(j, cdn_prefix, None).await;
+    assert_eq!(
+        parsed.files,
+        Some(vec![
+            File {
+                uri: Some(
+                    "https://arweave.net/_a4sXT6fOHI-5VHFOHLEF73wqKuZtJgE518Ciq9DGyI?ext=gif"
+                        .to_string(),
+                ),
+                cdn_uri: Some(
+                    "https://cdn.foobar.blah//https://arweave.net/_a4sXT6fOHI-5VHFOHLEF73wqKuZtJgE518Ciq9DGyI?ext=gif"
+                        .to_string(),
+                ),
+                mime: Some("image/gif".to_string()),
+                quality: None,
+                contexts: None,
+            },
+            File {
+                uri: Some("https://arweave.net/HVOJ3bTpqMJJJtd5nW2575vPTekLa_SSDsQc7AqV_Ho?ext=mp4".to_string()),
+                cdn_uri: None,
+                mime: Some("video/mp4".to_string()),
+                quality: None,
+                contexts: None,
+            },
+        ])
+    )
 }

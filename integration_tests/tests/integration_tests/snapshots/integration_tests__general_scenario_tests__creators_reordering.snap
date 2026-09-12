@@ -3,6 +3,7 @@ source: integration_tests/tests/integration_tests/general_scenario_tests.rs
 expression: response
 ---
 {
+  "last_indexed_slot": 1,
   "interface": "ProgrammableNFT",
   "id": "ANt9HygtvFmFJ1UcAHFLnM62JJWjk8fujMzjGfpKBfzk",
   "content": {
@@ -79,5 +80,12 @@ expression: response
   },
   "supply": null,
   "mutable": true,
-  "burnt": false
+  "burnt": false,
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "mint_authority": "9M1Xp6TSRe5tRvsQ7W6fRyqVzptfbQZQmYeSPyL5JuzY",
+    "freeze_authority": "9M1Xp6TSRe5tRvsQ7W6fRyqVzptfbQZQmYeSPyL5JuzY"
+  }
 }

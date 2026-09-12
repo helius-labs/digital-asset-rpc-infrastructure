@@ -1,0 +1,14 @@
+---
+source: integration_tests/tests/integration_tests/general_scenario_tests.rs
+expression: response
+---
+{
+  "total": 0,
+  "limit": 1000,
+  "items": [],
+  "nativeBalance": {
+    "lamports": 15175044086940527,
+    "price_per_sol": 127.519864247,
+    "total_price": 1935119561908896300.0
+  }
+}

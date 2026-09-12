@@ -1,0 +1,12 @@
+---
+source: integration_tests/tests/integration_tests/general_scenario_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "grand_total": 0,
+  "total": 0,
+  "limit": 1,
+  "page": 1,
+  "items": []
+}

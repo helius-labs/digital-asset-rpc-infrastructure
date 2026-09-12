@@ -1,0 +1,154 @@
+---
+source: integration_tests/tests/integration_tests/edition_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 2,
+  "limit": 1000,
+  "cursor": "5bEXK3igzQHXchPz36bGGrvmVF39p8iB1NJVgA5hWH3h",
+  "items": [
+    {
+      "interface": "V1_NFT",
+      "id": "JBJsYAnsGKUaZgEe3NeW1ypjstA7APBD5eVeaLgokFss",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://nftstorage.link/ipfs/bafkreifh74sdfkhdd53j2o7avygwmktav55i4bkjoog5nyet4x34um7mvu",
+        "files": [],
+        "metadata": {
+          "name": "Limited Drop",
+          "symbol": "JPS",
+          "token_standard": "NonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "HZdoqGiwv7iihzDJvAnoYtMg65n3P4VQoD9HjV7m1DT6",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": true,
+        "data_hash": "2ZkFBZGrJeRrJ7ibXGc167x4qaf8WaC71fm1NHrbm5rg",
+        "creator_hash": "EKDHSGbrGztomDfuiV4iqiZ6LschDJPsFiXjZ83f92Md",
+        "asset_hash": "FWdXrEK7q9CHBPanrGhLhQF2xo8wSxJ2E2qaiFCHk7Nm",
+        "tree": "BK1odnvdPePUsARpypamop1ug97d6yS4WTDXSRjNV8hF",
+        "seq": 3681564,
+        "leaf_id": 3678479
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "47vPgjapMCB7kk3VPahDhoNgiz8Nb7kcy6ue1fkemMun"
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": true,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": true,
+        "delegate": "FBQHeifBur7UDEUkBV9v16TAYfhDTnpjbwV8GTdp5jMq",
+        "ownership_model": "single",
+        "owner": "3HxqsUguP6E7CNqjvpEAnJ8v86qbyJgWvN2idAKygLdD"
+      },
+      "supply": {
+        "print_max_supply": 0,
+        "print_current_supply": 0,
+        "edition_nonce": 0
+      },
+      "mutable": false,
+      "burnt": false
+    },
+    {
+      "interface": "V1_NFT",
+      "id": "5bEXK3igzQHXchPz36bGGrvmVF39p8iB1NJVgA5hWH3h",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://arweave.net/qtd2UfdKkcmsg-JEGnL_ZJNrOsS0oc2rt_rRUzVuMEk",
+        "files": [],
+        "metadata": {
+          "name": "Silurian Period",
+          "symbol": "",
+          "token_standard": "NonFungibleEdition"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.1,
+        "basis_points": 1000,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "3HxqsUguP6E7CNqjvpEAnJ8v86qbyJgWvN2idAKygLdD"
+      },
+      "supply": {
+        "print_max_supply": 69,
+        "print_current_supply": 67,
+        "edition_nonce": 254,
+        "edition_number": 15,
+        "master_edition_mint": "Ey2Qb8kLctbchQsMnhZs5DjY32To2QtPuXNwWvk4NosL"
+      },
+      "mutable": false,
+      "burnt": false,
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "7eMnV8ktL57DhzaNzeapk1MG7dALTHdgeupAchgXai57",
+            "balance": 1
+          }
+        ],
+        "balance": 1,
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "7eMnV8ktL57DhzaNzeapk1MG7dALTHdgeupAchgXai57",
+        "mint_authority": "7LH1ZhFHpgLL81HvFaKCYiRvXLaNTqwN1jo6z6eQeL7B",
+        "freeze_authority": "7LH1ZhFHpgLL81HvFaKCYiRvXLaNTqwN1jo6z6eQeL7B"
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+---
+source: integration_tests/tests/integration_tests/fungible_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1,
+  "cursor": "GWdWkH9dvpRTrgEibJsPX2gkRFFHyJJDN9dQXTur3qq1",
+  "token_accounts": [
+    {
+      "address": "GWdWkH9dvpRTrgEibJsPX2gkRFFHyJJDN9dQXTur3qq1",
+      "mint": "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+      "owner": "8fGXZmFyzHYFdnsmGNQ1g1YjM5hEGp93rEQ7jN6Jjw4x",
+      "amount": 112,
+      "delegate": "E6dyiigyZihDiSx2g1tuoL9WuhzQxWwCTvKKY6qP4Koe",
+      "delegated_amount": 112,
+      "frozen": false
+    }
+  ]
+}

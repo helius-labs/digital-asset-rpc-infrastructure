@@ -1,42 +1,47 @@
 [package]
+edition = "2021"
 name = "das_api"
-version = { workspace = true }
-edition = { workspace = true }
-repository = { workspace = true }
-publish = { workspace = true }
+version = "0.7.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anchor-lang = { workspace = true }
-async-trait = { workspace = true }
-blockbuster = { workspace = true }
-bs58 = { workspace = true }
-cadence = { workspace = true }
-cadence-macros = { workspace = true }
-digital_asset_types = { workspace = true, features = ["json_types", "sql_types"] }
-env_logger  = { workspace = true }
-figment = { workspace = true, features = ["env"] }
-hyper = { workspace = true }
-jsonrpsee = { workspace = true, features = ["server", "macros"]}
-jsonrpsee-core = { workspace = true, features =["server"]}
-log = { workspace = true }
-metrics = { workspace = true }
-mpl-bubblegum = { workspace = true }
-mpl-token-metadata = { workspace = true,  features = ["serde"] }
-open-rpc-derive = { workspace = true }
-open-rpc-schema = { workspace = true }
-schemars = { workspace = true }
-schemars_derive = { workspace = true }
-sea-orm = { workspace = true, features = ["macros", "runtime-tokio-rustls", "sqlx-postgres"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-solana-sdk = { workspace = true }
-sqlx = { workspace = true, features = ["macros", "runtime-tokio-rustls", "postgres", "uuid", "offline", "json"] }
-thiserror = { workspace = true }
-tokio = { workspace = true, features = ["signal"] }
-tokio-postgres = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true, features = ["cors"] }
-tracing = { workspace = true }
+async-trait = {workspace = true}
+bs58 = {workspace = true}
+cadence = {workspace = true}
+cadence-macros = {workspace = true}
+common = {workspace = true}
+digital_asset_types = {workspace = true}
+env_logger = {workspace = true}
+figment = {workspace = true}
+http = {workspace = true}
+tower-default-headers = {workspace = true}
+hyper = {workspace = true}
+jsonrpsee = {workspace = true}
+jsonrpsee-core = {workspace = true}
+log = {workspace = true}
+metrics = {workspace = true}
+open-rpc-derive = {workspace = true}
+open-rpc-schema = {workspace = true}
+schemars = {workspace = true}
+schemars_derive = {workspace = true}
+sea-orm = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+solana-commitment-config = {workspace = true}
+solana-sdk = {workspace = true}
+sqlx = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tokio-postgres = {workspace = true}
+tower = {workspace = true}
+tower-http = {workspace = true}
+tracing = {workspace = true}
+solana-client = {workspace = true}
+solana-account-decoder = {workspace = true}
+solana-rpc-client-api = {workspace = true}
+reqwest = {workspace = true}
+rand = {workspace = true}
 
-[lints]
-workspace = true
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"

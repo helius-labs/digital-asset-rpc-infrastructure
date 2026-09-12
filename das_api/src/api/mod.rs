@@ -1,10 +1,18 @@
 use crate::error::DasApiError;
 use async_trait::async_trait;
-use digital_asset_types::rpc::filter::{AssetSortDirection, SearchConditionType};
-use digital_asset_types::rpc::options::Options;
-use digital_asset_types::rpc::response::{AssetList, TransactionSignatureList};
-use digital_asset_types::rpc::{filter::AssetSorting, response::GetGroupingResponse};
-use digital_asset_types::rpc::{Asset, AssetProof, Interface, OwnershipModel, RoyaltyModel};
+use digital_asset_types::dao::scopes::asset::TokenType;
+use digital_asset_types::dao::CreatedAtFilter;
+use digital_asset_types::rpc::filter::AssetSortDirection;
+use digital_asset_types::rpc::filter::AssetSorting;
+use digital_asset_types::rpc::filter::SearchConditionType;
+use digital_asset_types::rpc::options::SearchAssetsOptions;
+use digital_asset_types::rpc::options::{GetAssetOptions, Options};
+use digital_asset_types::rpc::response::{
+    AssetList, EditionsList, OwnerList, TokenAccountsList, TransactionSignatureList,
+};
+use digital_asset_types::rpc::{
+    Asset, AssetProof, Interface, NotFilter, OwnershipModel, RoyaltyModel,
+};
 use open_rpc_derive::{document_rpc, rpc};
 use open_rpc_schema::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,7 +21,7 @@ use std::collections::HashMap;
 mod api_impl;
 pub use api_impl::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetsByGroup {
     pub group_key: String,
@@ -29,7 +37,7 @@ pub struct GetAssetsByGroup {
     pub cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetsByOwner {
     pub owner_address: String,
@@ -48,31 +56,33 @@ pub struct GetAssetsByOwner {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAsset {
     pub id: String,
+    #[serde(default)]
+    pub raw_data: Option<bool>, // TODO: Deprecate
     #[serde(default, alias = "displayOptions")]
-    pub options: Option<Options>,
+    pub options: Option<GetAssetOptions>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssets {
     pub ids: Vec<String>,
     #[serde(default, alias = "displayOptions")]
-    pub options: Option<Options>,
+    pub options: Option<GetAssetOptions>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetProof {
     pub id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetProofs {
     pub ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetsByCreator {
     pub creator_address: String,
@@ -117,15 +127,33 @@ pub struct SearchAssets {
     pub after: Option<String>,
     #[serde(default)]
     pub json_uri: Option<String>,
+    #[serde(default)]
+    pub not: Option<NotFilter>,
     #[serde(default, alias = "displayOptions")]
-    pub options: Option<Options>,
+    pub options: Option<SearchAssetsOptions>,
     #[serde(default)]
     pub cursor: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub collections: Option<Vec<String>>,
+    #[serde(default)]
+    pub token_type: Option<TokenType>,
+    #[serde(default)]
+    pub created_at: Option<CreatedAtFilter>,
+    #[serde(default)]
+    pub tree: Option<String>,
+    #[serde(default)]
+    pub collection_nft: Option<bool>,
+    #[serde(default, alias = "isAgent")]
+    pub is_agent: Option<bool>,
+    #[serde(default, alias = "agentToken")]
+    pub agent_token: Option<String>,
+    #[serde(default, alias = "assetSigner")]
+    pub asset_signer: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetAssetsByAuthority {
     pub authority_address: String,
@@ -140,7 +168,7 @@ pub struct GetAssetsByAuthority {
     pub cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GetGrouping {
     pub group_key: String,
@@ -163,10 +191,49 @@ pub struct GetAssetSignatures {
     pub sort_direction: Option<AssetSortDirection>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SearchOwners {
+    pub asset: String,
+    pub limit: Option<u32>,
+    pub page: Option<u32>,
+    #[serde(default, alias = "displayOptions")]
+    pub options: Option<Options>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GetTokenAccounts {
+    pub owner: Option<String>,
+    pub mint: Option<String>,
+    pub limit: Option<u32>,
+    pub page: Option<u32>,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    #[serde(default, alias = "displayOptions")]
+    pub options: Option<Options>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GetNftEditions {
+    pub mint: Option<String>,
+    pub limit: Option<u32>,
+    pub page: Option<u32>,
+}
+
 #[document_rpc]
 #[async_trait]
 pub trait ApiContract: Send + Sync + 'static {
+    // Legacy health check.
     async fn check_health(&self) -> Result<(), DasApiError>;
+
+    // Kubernetes health checks.
+    async fn liveness(&self) -> Result<(), DasApiError>;
+    async fn readiness(&self) -> Result<(), DasApiError>;
+
     #[rpc(
         name = "getAssetProof",
         params = "named",
@@ -195,10 +262,11 @@ pub trait ApiContract: Send + Sync + 'static {
     )]
     async fn get_assets(&self, payload: GetAssets) -> Result<Vec<Option<Asset>>, DasApiError>;
     #[rpc(
-        name = "getAssetsByOwner",
+        name = "getAssetsV2",
         params = "named",
-        summary = "Get a list of assets owned by an address"
+        summary = "Get assets by their IDs"
     )]
+    async fn get_assets_v2(&self, payload: GetAssets) -> Result<digital_asset_types::rpc::response::GetAssetsV2Response, DasApiError>;
     async fn get_assets_by_owner(
         &self,
         payload: GetAssetsByOwner,
@@ -246,9 +314,24 @@ pub trait ApiContract: Send + Sync + 'static {
         payload: GetAssetSignatures,
     ) -> Result<TransactionSignatureList, DasApiError>;
     #[rpc(
-        name = "getGrouping",
+        name = "searchOwners",
         params = "named",
-        summary = "Get a list of assets grouped by a specific authority"
+        summary = "Get all owners of an asset sorted by the amount they own"
     )]
-    async fn get_grouping(&self, payload: GetGrouping) -> Result<GetGroupingResponse, DasApiError>;
+    async fn search_owners(&self, payload: SearchOwners) -> Result<OwnerList, DasApiError>;
+    #[rpc(
+        name = "getTokenAccounts",
+        params = "named",
+        summary = "Get all token accounts for an owner or a mint"
+    )]
+    async fn get_token_accounts(
+        &self,
+        payload: GetTokenAccounts,
+    ) -> Result<TokenAccountsList, DasApiError>;
+    #[rpc(
+        name = "getNftEditions",
+        params = "named",
+        summary = "Get all editions for a nft mint"
+    )]
+    async fn get_nft_editions(&self, payload: GetNftEditions) -> Result<EditionsList, DasApiError>;
 }

@@ -3,6 +3,7 @@ source: integration_tests/tests/integration_tests/cnft_tests.rs
 expression: response
 ---
 {
+  "last_indexed_slot": 1,
   "interface": "V1_NFT",
   "id": "Az9QTysJj1LW1F7zkYF21HgBj3FRpq3zpxTFdPnAJYm8",
   "content": {
@@ -78,5 +79,12 @@ expression: response
     "edition_nonce": 253
   },
   "mutable": true,
-  "burnt": false
+  "burnt": false,
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "mint_authority": "Efi1oabSQtJ2uNC83d6yjKW4Z94FuxoX9nYmadJFSRSe",
+    "freeze_authority": "Efi1oabSQtJ2uNC83d6yjKW4Z94FuxoX9nYmadJFSRSe"
+  }
 }

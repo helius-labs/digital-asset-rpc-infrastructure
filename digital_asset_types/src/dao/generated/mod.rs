@@ -3,16 +3,17 @@
 pub mod prelude;
 
 pub mod asset;
-pub mod asset_authority;
 pub mod asset_creators;
-pub mod asset_data;
-pub mod asset_grouping;
-pub mod asset_v1_account_attachments;
+pub mod asset_data_v2;
 pub mod backfill_items;
+pub mod blocks;
 pub mod cl_audits_v2;
 pub mod cl_items;
+pub mod editions;
+pub mod offchain_metadata;
+pub mod owners;
+pub mod price;
 pub mod raw_txn;
 pub mod sea_orm_active_enums;
 pub mod tasks;
-pub mod token_accounts;
 pub mod tokens;

@@ -1,0 +1,90 @@
+---
+source: integration_tests/tests/integration_tests/fungible_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "items": [
+    {
+      "interface": "FungibleToken",
+      "id": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "",
+        "files": [
+          {
+            "uri": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png",
+            "mime": "image/png"
+          }
+        ],
+        "metadata": {
+          "name": "USD Coin",
+          "symbol": "USDC"
+        },
+        "links": {
+          "image": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png"
+        }
+      },
+      "authorities": [
+        {
+          "address": "2wmVCSfPxGPjrnMMn7rchp4uaeoTqN39mXFC2zhPdri9",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "token",
+        "owner": "AYfy57orvDk2i3XoLzvHSFbnjxas7Zp6ae9rP4TnoA2i"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "BdnMPvk1PN1uCG413pkJBoKabFu9Ywmz7g4pQVcN1aQB",
+            "balance": 102000000
+          },
+          {
+            "address": "4tCxy6YtPMNhgFmdUs6weRxugx1EXvJSvTN3WMDA95gw",
+            "balance": 562946
+          }
+        ],
+        "balance": 102562946,
+        "supply": 10338784477093014,
+        "decimals": 6,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "4tCxy6YtPMNhgFmdUs6weRxugx1EXvJSvTN3WMDA95gw",
+        "mint_authority": "BJE5MMbqXjVwjAF7oxwPYXnTXDyspzZyt4vwenNw5ruG",
+        "freeze_authority": "7dGbd2QZcCKcTndnHcTL8q7SMVXAkp688NTQYwrRCrar"
+      }
+    }
+  ]
+}

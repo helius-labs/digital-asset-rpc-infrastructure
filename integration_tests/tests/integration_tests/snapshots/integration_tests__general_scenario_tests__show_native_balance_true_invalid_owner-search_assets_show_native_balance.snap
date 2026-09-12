@@ -1,0 +1,15 @@
+---
+source: integration_tests/tests/integration_tests/general_scenario_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 0,
+  "limit": 1000,
+  "items": [],
+  "nativeBalance": {
+    "lamports": 0,
+    "price_per_sol": 100.0,
+    "total_price": 0.0
+  }
+}

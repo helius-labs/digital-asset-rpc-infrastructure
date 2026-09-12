@@ -3,6 +3,7 @@ source: integration_tests/tests/integration_tests/cnft_tests.rs
 expression: response
 ---
 {
+  "last_indexed_slot": 1,
   "interface": "V1_NFT",
   "id": "DFRJ4PwAze1mMQccRmdyc46yQpEVd4FPiwtAVgzGCs7g",
   "content": {

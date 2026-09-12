@@ -1,15 +1,23 @@
 [package]
 name = "migration"
-version = { workspace = true }
-edition = { workspace = true }
-repository = { workspace = true }
-publish = { workspace = true }
+version = "0.7.2"
+edition = "2021"
+publish = false
+
+[lib]
+name = "migration"
+path = "src/lib.rs"
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes", "tokio1"] }
+async-std = { workspace = true }
 enum-iterator = { workspace = true }
 enum-iterator-derive = { workspace = true }
-sea-orm-migration = { workspace = true, features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+# Force regex to include std feature for compatibility with sea-orm-cli
+regex = { version = "1", features = ["std", "perf", "unicode"] }
 
-[lints]
-workspace = true
+[dependencies.sea-orm-migration]
+version = "0.10.6"
+features = [
+    "runtime-tokio-rustls",
+    "sqlx-postgres",
+]

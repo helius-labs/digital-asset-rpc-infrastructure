@@ -1,0 +1,22 @@
+[package]
+edition = "2021"
+name = "program_backfill"
+publish = false
+version = "0.0.1"
+
+[dependencies]
+acc_backfill = {path = "../acc_backfill"}
+anyhow = {workspace = true}
+async-stream = {workspace = true}
+base64 = {workspace = true}
+bs58 = {workspace = true}
+clap = {workspace = true}
+futures = {workspace = true}
+log = {workspace = true}
+nft_ingester = {workspace = true}
+plerkle_messenger = {workspace = true}
+reqwest = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+solana-sdk = {workspace = true}
+tokio = {workspace = true}

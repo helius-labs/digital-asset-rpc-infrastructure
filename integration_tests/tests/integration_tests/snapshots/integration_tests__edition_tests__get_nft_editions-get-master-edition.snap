@@ -1,0 +1,75 @@
+---
+source: integration_tests/tests/integration_tests/edition_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "Ey2Qb8kLctbchQsMnhZs5DjY32To2QtPuXNwWvk4NosL",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://arweave.net/qtd2UfdKkcmsg-JEGnL_ZJNrOsS0oc2rt_rRUzVuMEk",
+    "files": [],
+    "metadata": {
+      "name": "Silurian Period",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.1,
+    "basis_points": 1000,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+      "share": 100,
+      "verified": true
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "DN5aWeXu4Tx4uBUG3zvqpmcRG7jaYgeH87SnViLiRd7v"
+  },
+  "supply": {
+    "print_max_supply": 69,
+    "print_current_supply": 67,
+    "edition_nonce": 254
+  },
+  "mutable": true,
+  "burnt": false,
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "mint_authority": "8SHfqzJYABeGfiG1apwiEYt6TvfGQiL1pdwEjvTKsyiZ",
+    "freeze_authority": "8SHfqzJYABeGfiG1apwiEYt6TvfGQiL1pdwEjvTKsyiZ"
+  }
+}

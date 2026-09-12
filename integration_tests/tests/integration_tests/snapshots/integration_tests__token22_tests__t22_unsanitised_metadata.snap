@@ -1,0 +1,89 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "6XDmP7QwL3HkxW9dei82rHC5zw69ugucxc4GQ6uvmkCf",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://gateway.pinit.io/ipfs/QmaYszvA2yFVpDAfe2EgYhemgFQgrw9TfsuVfiGFRRgRwZ/11.json",
+    "files": [],
+    "metadata": {
+      "name": "",
+      "symbol": "asdas"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "2iWGr11zRizbmyYSxuwN4owhuDMi91u4cLX6neAWMzWZ",
+      "scopes": [
+        "metadata"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": ""
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false,
+  "mint_extensions": {
+    "metadata": {
+      "uri": "https://gateway.pinit.io/ipfs/QmaYszvA2yFVpDAfe2EgYhemgFQgrw9TfsuVfiGFRRgRwZ/11.json",
+      "mint": "6XDmP7QwL3HkxW9dei82rHC5zw69ugucxc4GQ6uvmkCf",
+      "name": "",
+      "symbol": "asdas",
+      "update_authority": "2iWGr11zRizbmyYSxuwN4owhuDMi91u4cLX6neAWMzWZ",
+      "additional_metadata": []
+    },
+    "transfer_hook": {
+      "authority": "DP4RxhC2y18hsD5ehdUjjRNiVUHveWdn19SdLPqPk8Lp",
+      "program_id": null
+    },
+    "metadata_pointer": {
+      "authority": "DP4RxhC2y18hsD5ehdUjjRNiVUHveWdn19SdLPqPk8Lp",
+      "metadata_address": "6XDmP7QwL3HkxW9dei82rHC5zw69ugucxc4GQ6uvmkCf"
+    },
+    "group_member_pointer": {
+      "authority": "DP4RxhC2y18hsD5ehdUjjRNiVUHveWdn19SdLPqPk8Lp",
+      "member_address": "6XDmP7QwL3HkxW9dei82rHC5zw69ugucxc4GQ6uvmkCf"
+    }
+  },
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "freeze_authority": "DP4RxhC2y18hsD5ehdUjjRNiVUHveWdn19SdLPqPk8Lp"
+  }
+}

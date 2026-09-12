@@ -1,0 +1,94 @@
+---
+source: integration_tests/tests/integration_tests/production_tests.rs
+expression: response
+---
+{
+  "total": 1,
+  "limit": 1000,
+  "cursor": "SMBtHCCC6RYRutFEPb4gZqeBLUZbMNhRKaMKZZLHi7W",
+  "items": [
+    {
+      "interface": "V1_NFT",
+      "id": "SMBtHCCC6RYRutFEPb4gZqeBLUZbMNhRKaMKZZLHi7W",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://arweave.net/2-0Ck8lwBTecPVKO2smJJmaZXFVd5VFqq8cd7WXR0BY",
+        "files": [
+          {
+            "uri": "https://arweave.net/lZ5FdIVagNoNvI4QFoHhB6Xyn4oVGLV9xOTW32WBC20",
+            "mime": "image/png"
+          }
+        ],
+        "metadata": {
+          "description": "SMB is a collection of 5000 randomly generated 24x24 pixels NFTs on the Solana Blockchain. Each SolanaMonkey is unique and comes with different type and attributes varying in rarity.",
+          "name": "SMB Gen2",
+          "symbol": "SMB",
+          "token_standard": "NonFungible"
+        },
+        "links": {
+          "image": "https://arweave.net/lZ5FdIVagNoNvI4QFoHhB6Xyn4oVGLV9xOTW32WBC20",
+          "external_url": "https://solanamonkey.business/"
+        }
+      },
+      "authorities": [
+        {
+          "address": "Ht5tqGiAf5tF8nRVDnpdvj7B9vNot6ijzykEDtQypxYC",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.060000000000000005,
+        "basis_points": 600,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "mdaoxg4DVGptU4WSpzGyVpK3zqsgn7Qzx5XNgWTcEA2",
+          "share": 0,
+          "verified": true
+        },
+        {
+          "address": "HAryckvjyViFQEmhmMoCtqqBMJnpXEYViamyDhZUJfnG",
+          "share": 100,
+          "verified": false
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "mdaoxg4DVGptU4WSpzGyVpK3zqsgn7Qzx5XNgWTcEA2"
+      },
+      "supply": {
+        "print_max_supply": 0,
+        "print_current_supply": 0,
+        "edition_nonce": 255
+      },
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "HaWmu8qALT2Gm2oB4TAtPGhk2PGujHnuh8EqKP2gvoCb"
+      }
+    }
+  ]
+}

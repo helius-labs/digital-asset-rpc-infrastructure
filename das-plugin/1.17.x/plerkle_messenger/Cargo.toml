@@ -1,0 +1,32 @@
+[package]
+authors = ["Metaplex Developers <dev@metaplex.com>"]
+description = "Metaplex Messenger trait for Geyser plugin producer/consumer patterns."
+edition = "2021"
+license = "AGPL-3.0"
+name = "plerkle_messenger"
+readme = "Readme.md"
+repository = "https://github.com/metaplex-foundation/digital-asset-validator-plugin"
+version = "1.6.0"
+
+[dependencies]
+async-mutex = { workspace = true }
+async-trait = { workspace = true }
+blake3 = { workspace = true }
+bs58 = { workspace = true }
+cadence = { workspace = true }
+cadence-macros = { workspace = true }
+figment = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+plerkle_serialization = { workspace = true }
+# We are using the main github branch in redis in order to use the timeout functionality
+# https://github.com/redis-rs/redis-rs/issues/1013
+redis = {git = "https://github.com/redis-rs/redis-rs.git", rev = "59e9a6a2f91737a652583c2f356b84c115a899f8", features = ["aio", "tokio-comp", "streams", "tokio-native-tls-comp", "connection-manager"], optional = true}
+serde = {workspace = true, features = ["derive"]}
+thiserror = { workspace = true }
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dev-dependencies]
+tokio = {workspace = true}

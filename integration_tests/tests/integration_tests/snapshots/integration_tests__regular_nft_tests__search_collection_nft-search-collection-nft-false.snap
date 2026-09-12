@@ -1,0 +1,164 @@
+---
+source: integration_tests/tests/integration_tests/regular_nft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 2,
+  "limit": 1000,
+  "cursor": "8jJUWQJmQeEhj1bEMPgdDPmzConnPMyEe6bmmkLFRMQj",
+  "items": [
+    {
+      "interface": "ProgrammableNFT",
+      "id": "DL4pWLrfh2wXiovZLtbjeXDYMoo6zoa7wFCVJX8qUpxw",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://madlads.s3.us-west-2.amazonaws.com/json/1.json",
+        "files": [],
+        "metadata": {
+          "name": "Mad Lads #1",
+          "symbol": "MAD",
+          "token_standard": "ProgrammableNonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w",
+          "verified": true
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.042,
+        "basis_points": 420,
+        "primary_sale_happened": true,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "5XvhfmRjwXkGp3jHGmaKpqeerNYjkuZZBYLVQYdeVcRv",
+          "share": 0,
+          "verified": true
+        },
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": true,
+        "delegated": true,
+        "delegate": "4RR8Jj9GLfsfTQhU547Ne2F989abzaCcqsmrxTbG1WC7",
+        "ownership_model": "single",
+        "owner": "GzFzShD9gDMdunCEZEBNMxsYvvjzsfNVrvZeqk6ETt6U"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "G4p6xtiqx48mQQtoLbYgx5X42nD6nfFk6rzpSubLx3KE"
+      }
+    },
+    {
+      "interface": "ProgrammableNFT",
+      "id": "8jJUWQJmQeEhj1bEMPgdDPmzConnPMyEe6bmmkLFRMQj",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://madlads.s3.us-west-2.amazonaws.com/json/2.json",
+        "files": [],
+        "metadata": {
+          "name": "Mad Lads #2",
+          "symbol": "MAD",
+          "token_standard": "ProgrammableNonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w",
+          "verified": true
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.042,
+        "basis_points": 420,
+        "primary_sale_happened": true,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "5XvhfmRjwXkGp3jHGmaKpqeerNYjkuZZBYLVQYdeVcRv",
+          "share": 0,
+          "verified": true
+        },
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": true,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "73oww1BExgDDKabnwfo2Lcs8KufDW5SDr5Sqogy98mo2"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "2oNDVGvifRFU7fvkzG195KAPcjDnxWrVN4JhNjJ3zkCz"
+      }
+    }
+  ]
+}

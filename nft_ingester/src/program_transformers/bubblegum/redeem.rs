@@ -2,6 +2,7 @@ use anchor_lang::prelude::Pubkey;
 use log::debug;
 
 use crate::{
+    config::IngesterConfig,
     error::IngesterError,
     program_transformers::bubblegum::{
         save_changelog_event, u32_to_u8_array, upsert_asset_with_leaf_info, upsert_asset_with_seq,
@@ -11,18 +12,18 @@ use blockbuster::{instruction::InstructionBundle, programs::bubblegum::Bubblegum
 use sea_orm::{ConnectionTrait, TransactionTrait};
 
 pub async fn redeem<'c, T>(
+    _config: &'c IngesterConfig,
     parsing_result: &BubblegumInstruction,
     bundle: &InstructionBundle<'c>,
-    txn: &'c T,
+    txn_or_conn: &'c T,
     instruction: &str,
-    cl_audits: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
     if let Some(cl) = &parsing_result.tree_update {
-        let seq = save_changelog_event(cl, bundle.slot, bundle.txn_id, txn, instruction, cl_audits)
-            .await?;
+        let seq =
+            save_changelog_event(cl, bundle.slot, bundle.txn_id, txn_or_conn, instruction).await?;
         let leaf_index = cl.index;
         let (asset_id, _) = Pubkey::find_program_address(
             &[
@@ -30,7 +31,7 @@ where
                 cl.id.as_ref(),
                 u32_to_u8_array(leaf_index).as_ref(),
             ],
-            &mpl_bubblegum::ID,
+            &solana_sdk::pubkey::Pubkey::new_from_array(mpl_bubblegum::ID.to_bytes()),
         );
         debug!("Indexing redeem for asset id: {:?}", asset_id);
         let id_bytes = asset_id.to_bytes();
@@ -40,7 +41,7 @@ where
         // Begin a transaction.  If the transaction goes out of scope (i.e. one of the executions has
         // an error and this function returns it using the `?` operator), then the transaction is
         // automatically rolled back.
-        let multi_txn = txn.begin().await?;
+        let multi_txn = txn_or_conn.begin().await?;
 
         // Partial update of asset table with just leaf.
         upsert_asset_with_leaf_info(
@@ -51,6 +52,9 @@ where
             vec![0; 32],
             [0; 32],
             [0; 32],
+            None,
+            None,
+            None,
             seq as i64,
         )
         .await?;

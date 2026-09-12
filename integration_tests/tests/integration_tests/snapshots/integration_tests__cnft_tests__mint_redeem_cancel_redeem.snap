@@ -3,6 +3,7 @@ source: integration_tests/tests/integration_tests/cnft_tests.rs
 expression: response
 ---
 {
+  "last_indexed_slot": 1,
   "interface": "V1_NFT",
   "id": "5WaPA7HLZKGg56bcKiroMXAzHmB1mdxK3QTeCDepLkiK",
   "content": {
@@ -12,7 +13,7 @@ expression: response
     "metadata": {
       "name": "test",
       "symbol": "TST",
-      "token_standard": "NonFungible"
+      "token_standard": "Fungible"
     },
     "links": {}
   },

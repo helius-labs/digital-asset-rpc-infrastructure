@@ -21,7 +21,7 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(AssetCreators::Table)
                     .add_column(
-                        ColumnDef::new(AssetCreators::Position)
+                        ColumnDef::new(Alias::new("position"))
                             .small_integer()
                             .not_null()
                             .default(-1),
@@ -46,7 +46,7 @@ impl MigrationTrait for Migration {
                     .unique()
                     .name("asset_creator_pos_unique")
                     .col(AssetCreators::AssetId)
-                    .col(AssetCreators::Position)
+                    .col(Alias::new("position"))
                     .table(AssetCreators::Table)
                     .to_owned(),
             )

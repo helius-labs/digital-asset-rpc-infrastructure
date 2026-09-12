@@ -26,6 +26,8 @@ pub enum IngesterError {
     DeserializationError(String),
     #[error("Task Manager Error: {0}")]
     TaskManagerError(String),
+    #[error("Task Manager Redis Messenger Error: ({msg})")]
+    TaskManagerMessengerError { msg: String },
     #[error("Missing or invalid configuration: ({msg})")]
     ConfigurationError { msg: String },
     #[error("Error getting RPC data: {0}")]
@@ -42,16 +44,18 @@ pub enum IngesterError {
     DatabaseError(String),
     #[error("Unknown Task Type: {0}")]
     UnknownTaskType(String),
-    #[error("BG Task Manager Not Started")]
-    TaskManagerNotStarted,
+    #[error("BG Task Listener not started. Must start Listener first before getting the sender.")]
+    TaskListenerNotStarted,
     #[error("Unrecoverable task error: {0}")]
     UnrecoverableTaskError(String),
     #[error("Cache Storage Write Error: {0}")]
     CacheStorageWriteError(String),
     #[error("HttpError {status_code}")]
-    HttpError { status_code: String },
+    HttpError { status_code: String, uri: String },
     #[error("AssetIndex Error {0}")]
     AssetIndexError(String),
+    #[error("Internal Error: {0}")]
+    InternalError(String),
 }
 
 impl From<reqwest::Error> for IngesterError {

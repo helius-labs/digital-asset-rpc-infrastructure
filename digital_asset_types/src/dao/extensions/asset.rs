@@ -1,52 +1,47 @@
 use sea_orm::{EntityTrait, EnumIter, Related, RelationDef, RelationTrait};
 
 use crate::dao::{
-    asset, asset_authority, asset_creators, asset_data, asset_grouping,
-    asset_v1_account_attachments,
+    asset, asset_creators, asset_data_v2, editions, price,
     sea_orm_active_enums::{OwnerType, RoyaltyTargetType},
 };
 
 #[derive(Copy, Clone, Debug, EnumIter)]
 pub enum Relation {
-    AssetData,
-    AssetV1AccountAttachments,
-    AssetAuthority,
+    AssetDataV2,
     AssetCreators,
-    AssetGrouping,
+    Price,
+    MasterEdition,
+    PrintEdition,
 }
 
 impl RelationTrait for Relation {
     fn def(&self) -> RelationDef {
         match self {
-            Self::AssetData => asset::Entity::belongs_to(asset_data::Entity)
-                .from(asset::Column::AssetData)
-                .to(asset_data::Column::Id)
+            Self::AssetDataV2 => asset::Entity::belongs_to(asset_data_v2::Entity)
+                .from(asset::Column::Id)
+                .to(asset_data_v2::Column::Id)
                 .into(),
-            Self::AssetV1AccountAttachments => {
-                asset::Entity::has_many(asset_v1_account_attachments::Entity).into()
-            }
-            Self::AssetAuthority => asset::Entity::has_many(asset_authority::Entity).into(),
             Self::AssetCreators => asset::Entity::has_many(asset_creators::Entity).into(),
-            Self::AssetGrouping => asset::Entity::has_many(asset_grouping::Entity).into(),
+            Self::Price => asset::Entity::belongs_to(price::Entity)
+                .from(asset::Column::Id)
+                .to(price::Column::Mint)
+                .into(),
+
+            Self::MasterEdition => asset::Entity::has_one(editions::Entity)
+                .from(asset::Column::EditionAddress)
+                .to(editions::Column::Id)
+                .into(),
+            Self::PrintEdition => asset::Entity::has_many(editions::Entity)
+                .from(asset::Column::EditionAddress)
+                .to(editions::Column::Parent)
+                .into(),
         }
     }
 }
 
-impl Related<asset_data::Entity> for asset::Entity {
+impl Related<asset_data_v2::Entity> for asset::Entity {
     fn to() -> RelationDef {
-        Relation::AssetData.def()
-    }
-}
-
-impl Related<asset_v1_account_attachments::Entity> for asset::Entity {
-    fn to() -> RelationDef {
-        Relation::AssetV1AccountAttachments.def()
-    }
-}
-
-impl Related<asset_authority::Entity> for asset::Entity {
-    fn to() -> RelationDef {
-        Relation::AssetAuthority.def()
+        Relation::AssetDataV2.def()
     }
 }
 
@@ -56,9 +51,15 @@ impl Related<asset_creators::Entity> for asset::Entity {
     }
 }
 
-impl Related<asset_grouping::Entity> for asset::Entity {
+impl Related<price::Entity> for asset::Entity {
     fn to() -> RelationDef {
-        Relation::AssetGrouping.def()
+        Relation::Price.def()
+    }
+}
+
+impl Related<editions::Entity> for asset::Entity {
+    fn to() -> RelationDef {
+        Relation::MasterEdition.def()
     }
 }
 
@@ -102,7 +103,34 @@ impl Default for asset::Model {
             creator_hash: None,
             owner_delegate_seq: None,
             leaf_seq: None,
+            creators_info: None,
+            collections_info: None,
+            authorities_info: None,
+            mint_extensions: None,
+            token_extensions: None,
+            metadata_account_id: None,
             base_info_seq: None,
+            edition_address: None,
+            mpl_core_plugins: None,
+            mpl_core_unknown_plugins: None,
+            mpl_core_collection_current_size: None,
+            mpl_core_collection_num_minted: None,
+            mpl_core_plugins_json_version: None,
+            mpl_core_external_plugins: None,
+            mpl_core_unknown_external_plugins: None,
+            authority_address: None,
+            authority_seq: None,
+            authority_slot_updated: None,
+            authority_scopes: None,
+            collection_hash: None,
+            asset_data_hash: None,
+            bubblegum_flags: None,
+            non_transferable: None,
+            t22_metadata_address: None,
+            is_agent: false,
+            agent_token: None,
+            asset_signer: None,
+            slot_updated_agent_registry: None,
         }
     }
 }

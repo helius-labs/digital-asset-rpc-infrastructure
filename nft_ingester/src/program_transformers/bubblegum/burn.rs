@@ -1,4 +1,5 @@
 use crate::{
+    config::IngesterConfig,
     error::IngesterError,
     program_transformers::bubblegum::{
         save_changelog_event, u32_to_u8_array, upsert_asset_with_seq,
@@ -14,18 +15,18 @@ use sea_orm::{
 };
 
 pub async fn burn<'c, T>(
+    _config: &'c IngesterConfig,
     parsing_result: &BubblegumInstruction,
     bundle: &InstructionBundle<'c>,
-    txn: &'c T,
+    txn_or_conn: &'c T,
     instruction: &str,
-    cl_audits: bool,
 ) -> Result<(), IngesterError>
 where
     T: ConnectionTrait + TransactionTrait,
 {
     if let Some(cl) = &parsing_result.tree_update {
-        let seq = save_changelog_event(cl, bundle.slot, bundle.txn_id, txn, instruction, cl_audits)
-            .await?;
+        let seq =
+            save_changelog_event(cl, bundle.slot, bundle.txn_id, txn_or_conn, instruction).await?;
         let leaf_index = cl.index;
         let (asset_id, _) = Pubkey::find_program_address(
             &[
@@ -33,7 +34,7 @@ where
                 cl.id.as_ref(),
                 u32_to_u8_array(leaf_index).as_ref(),
             ],
-            &mpl_bubblegum::ID,
+            &solana_sdk::pubkey::Pubkey::new_from_array(mpl_bubblegum::ID.to_bytes()),
         );
         debug!("Indexing burn for asset id: {:?}", asset_id);
         let id_bytes = asset_id.to_bytes();
@@ -47,7 +48,7 @@ where
         // Begin a transaction.  If the transaction goes out of scope (i.e. one of the executions has
         // an error and this function returns it using the `?` operator), then the transaction is
         // automatically rolled back.
-        let multi_txn = txn.begin().await?;
+        let multi_txn = txn_or_conn.begin().await?;
 
         // Upsert asset table `burnt` column.  Note we don't check for decompression (asset.seq = 0)
         // because we know if the item was burnt it could not have been decompressed later.

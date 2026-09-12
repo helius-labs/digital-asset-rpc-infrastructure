@@ -1,0 +1,84 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "DVg4Y4ZEQ7EaiV2dwXZ21E7aWhizu6ZQ9ZA3jZd263Xb",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://bafybeiccixdciol2wtewh6v3vmr6byc6kmycdzxzqatdos2p676phdp6di.ipfs.dweb.link",
+    "files": [],
+    "metadata": {
+      "name": "miaomiaomiao",
+      "symbol": "miaomiaomiao"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "92ivrruXpkUh7zoDBWL1HbVJX8Hd16x5p6xxmdLBFimF",
+      "scopes": [
+        "metadata"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "ExA7MKcvVcQU39paNjpCQb7QQcg6QBm9uQbicwpKZZ3b"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false,
+  "mint_extensions": {
+    "metadata": {
+      "uri": "https://bafybeiccixdciol2wtewh6v3vmr6byc6kmycdzxzqatdos2p676phdp6di.ipfs.dweb.link",
+      "mint": "DVg4Y4ZEQ7EaiV2dwXZ21E7aWhizu6ZQ9ZA3jZd263Xb",
+      "name": "miaomiaomiao",
+      "symbol": "miaomiaomiao",
+      "update_authority": "92ivrruXpkUh7zoDBWL1HbVJX8Hd16x5p6xxmdLBFimF",
+      "additional_metadata": []
+    },
+    "metadata_pointer": {
+      "authority": "92ivrruXpkUh7zoDBWL1HbVJX8Hd16x5p6xxmdLBFimF",
+      "metadata_address": "DVg4Y4ZEQ7EaiV2dwXZ21E7aWhizu6ZQ9ZA3jZd263Xb"
+    },
+    "group_member_pointer": {
+      "authority": "92ivrruXpkUh7zoDBWL1HbVJX8Hd16x5p6xxmdLBFimF",
+      "member_address": "DVg4Y4ZEQ7EaiV2dwXZ21E7aWhizu6ZQ9ZA3jZd263Xb"
+    }
+  },
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+  }
+}

@@ -1,0 +1,11 @@
+---
+source: integration_tests/tests/integration_tests/cnft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 0,
+  "limit": 10,
+  "page": 1,
+  "token_accounts": []
+}

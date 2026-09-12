@@ -1,0 +1,45 @@
+---
+source: integration_tests/tests/integration_tests/background_task_tests.rs
+expression: metadata.unwrap()
+---
+{
+  "name": "Blue Ticket Card",
+  "symbol": "",
+  "seller_fee_basis_points": 5000,
+  "properties": {
+    "files": [
+      {
+        "uri": "https://wagmi-collectibles.s3.amazonaws.com/drops/trait_packs/TICKET-CARD-BLUE.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "image",
+    "creators": [
+      {
+        "address": "GYXaUgjPMYCyBxNo8p1U6abFFkteczjMw7iyuGEr3JnJ",
+        "verified": false,
+        "share": 100
+      }
+    ]
+  },
+  "description": "Blue ticket card from Coll3ctibles.  Redeem card for tickets.  Tickets will be used to access Limited Drops, earn Special Prizes, move up The Leaderboard, and ██████.",
+  "image": "https://wagmi-collectibles.s3.amazonaws.com/drops/trait_packs/TICKET-CARD-BLUE.png",
+  "attributes": [
+    {
+      "trait_type": "Type",
+      "value": "Ticket Card"
+    },
+    {
+      "trait_type": "Category",
+      "value": "Blue"
+    },
+    {
+      "trait_type": "Source Pack",
+      "value": "Crack Pack (005)"
+    }
+  ],
+  "collection": {
+    "name": "Coll3ctibles Ticket Packs",
+    "family": "Coll3ctibles Ticket Packs"
+  }
+}

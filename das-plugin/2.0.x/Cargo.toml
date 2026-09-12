@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "plerkle_messenger",
+    "plerkle_serialization"
+]

@@ -1,0 +1,80 @@
+---
+source: integration_tests/tests/integration_tests/general_scenario_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "94WpxCmtoutLHy43Pdz185SNyVqybc1wVAWsXEJ78dUk",
+  "items": [
+    {
+      "interface": "V1_NFT",
+      "id": "94WpxCmtoutLHy43Pdz185SNyVqybc1wVAWsXEJ78dUk",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://www.hi-hi.vip/json/jup555.json",
+        "files": [],
+        "metadata": {
+          "name": "🎁2.0 Jupiter AirDrop",
+          "symbol": "Jup2.0",
+          "token_standard": "NonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "CZdADtH3vrUA7J1DWiycnnavN9mnvSvXQGYkYVL5r8yg",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": true,
+        "data_hash": "B3ErH6VpzN2DN1NKETZVBSquXNvL9kzaXMDpYi788D9R",
+        "creator_hash": "76gtt9R6YAjXWrMbTiQ2e85NmAgTXUjS3sx5jUQKTXuF",
+        "asset_hash": "2kmsHVdVyeCEvxmCVeFrsiZ1u2cHHe2q9zahj1GRv5xW",
+        "tree": "CKEUURpXfbX1v8tS4ykBJpkyn5GCqyeM2s6JxDB5HduF",
+        "seq": 2283968,
+        "leaf_id": 2275931
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "FkKmC7dXsJP7rfcaRso9dWpLDQ1AbBt6iQXYovAPNexf"
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "8jCbdWzyEfJsjgKj3ua3JJNHKXuvSURvtpC5aE53SMZm",
+          "share": 100,
+          "verified": false
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": true,
+        "delegate": "B8TRtut3giumau5eXZ5Mk3deY4D3uXzbkHcTERePMGLj",
+        "ownership_model": "single",
+        "owner": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+      },
+      "supply": {
+        "print_max_supply": 0,
+        "print_current_supply": 0,
+        "edition_nonce": 0
+      },
+      "mutable": true,
+      "burnt": false
+    }
+  ]
+}

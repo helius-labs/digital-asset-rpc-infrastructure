@@ -1,0 +1,1 @@
+pub const FAKE_SOL_PUBKEY: &str = "1111111QLbz7JHiBTspS962RLKV8GndWFwiEaqKM";

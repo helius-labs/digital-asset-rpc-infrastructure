@@ -1,0 +1,77 @@
+---
+source: integration_tests/tests/integration_tests/cnft_tests_v2_leaf_schema.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "MplBubblegumV2",
+  "id": "Eoz1EtUHHpNPXU8UHM5dP93npGWzLx6uh19ExexhMwBm",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://example.com/my-nft.json",
+    "files": [],
+    "metadata": {
+      "name": "My NFT",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "AawsU5gH85Fn5tEkFFbGCC9XzB2y6akc1kRjipwi9M82",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": true,
+    "data_hash": "6WtqR4xycmSozRgvbb3fc5h7CstSxCtae4yXs7NN4MSn",
+    "creator_hash": "4hrnN1hhb3yXckFCAuQ3YrDd2fyjHvWsif5fgyKNr683",
+    "collection_hash": "3mG2ogUZaUxX7TKRbDNDUPnesYghsd87YFAduqs4TETk",
+    "asset_data_hash": "EKDHSGbrGztomDfuiV4iqiZ6LschDJPsFiXjZ83f92Md",
+    "flags": 0,
+    "asset_hash": "ArZbgUEkPcuCQejNeWNucx3Q9D3pUkzn3pwQ1CVVVf2a",
+    "tree": "2fvrFLKAuB5c2xpC4UzKkWqGEPc2iZ72SzDVVQ2cDwc1",
+    "seq": 4,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.05,
+    "basis_points": 500,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "6v1P2cXLhnXFbf4PV3tZETojQ4aFm1J4goT1QQrFMSXv",
+      "share": 60,
+      "verified": false
+    },
+    {
+      "address": "CGdMpPQUr6PdXKJmV4oFR7JoLgLBRXN3qGDwafAbFA8K",
+      "share": 40,
+      "verified": true
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "non_transferable": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "3vDxzCgwwP5fGe4RjkTG5N2WFnEVbgciELoR5PCFi4nS"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false
+}

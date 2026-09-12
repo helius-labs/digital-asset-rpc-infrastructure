@@ -1,7 +1,8 @@
 use jsonrpsee::RpcModule;
 use log::debug;
 
-use crate::{api::*, error::DasApiError};
+use crate::api::*;
+use crate::error::DasApiError;
 
 pub struct RpcApiBuilder;
 
@@ -15,6 +16,17 @@ impl RpcApiBuilder {
             rpc_context.check_health().await.map_err(Into::into)
         })?;
 
+        module.register_async_method("liveness", |_rpc_params, rpc_context| async move {
+            debug!("Checking Liveness");
+            rpc_context.liveness().await.map_err(Into::into)
+        })?;
+
+        module.register_async_method("readiness", |_rpc_params, rpc_context| async move {
+            debug!("Checking Readiness");
+            rpc_context.readiness().await.map_err(Into::into)
+        })?;
+
+        // get_asset_proof
         module.register_async_method("get_asset_proof", |rpc_params, rpc_context| async move {
             let payload = rpc_params.parse::<GetAssetProof>()?;
             rpc_context
@@ -24,6 +36,7 @@ impl RpcApiBuilder {
         })?;
         module.register_alias("getAssetProof", "get_asset_proof")?;
 
+        // get_asset_proofs / get_asset_proof_batch
         module.register_async_method("get_asset_proofs", |rpc_params, rpc_context| async move {
             let payload = rpc_params.parse::<GetAssetProofs>()?;
             rpc_context
@@ -35,12 +48,14 @@ impl RpcApiBuilder {
         module.register_alias("get_asset_proof_batch", "get_asset_proofs")?;
         module.register_alias("getAssetProofBatch", "get_asset_proofs")?;
 
+        // get_asset
         module.register_async_method("get_asset", |rpc_params, rpc_context| async move {
             let payload = rpc_params.parse::<GetAsset>()?;
             rpc_context.get_asset(payload).await.map_err(Into::into)
         })?;
         module.register_alias("getAsset", "get_asset")?;
 
+        // get_assets / get_asset_batch
         module.register_async_method("get_assets", |rpc_params, rpc_context| async move {
             let payload = rpc_params.parse::<GetAssets>()?;
             rpc_context.get_assets(payload).await.map_err(Into::into)
@@ -49,6 +64,7 @@ impl RpcApiBuilder {
         module.register_alias("get_asset_batch", "get_assets")?;
         module.register_alias("getAssetBatch", "get_assets")?;
 
+        // get_assets_by_owner
         module.register_async_method(
             "get_assets_by_owner",
             |rpc_params, rpc_context| async move {
@@ -61,6 +77,7 @@ impl RpcApiBuilder {
         )?;
         module.register_alias("getAssetsByOwner", "get_assets_by_owner")?;
 
+        // get_assets_by_creator
         module.register_async_method(
             "get_assets_by_creator",
             |rpc_params, rpc_context| async move {
@@ -73,17 +90,7 @@ impl RpcApiBuilder {
         )?;
         module.register_alias("getAssetsByCreator", "get_assets_by_creator")?;
 
-        module.register_async_method(
-            "getAssetsByAuthority",
-            |rpc_params, rpc_context| async move {
-                let payload = rpc_params.parse::<GetAssetsByAuthority>()?;
-                rpc_context
-                    .get_assets_by_authority(payload)
-                    .await
-                    .map_err(Into::into)
-            },
-        )?;
-
+        // get_assets_by_group
         module.register_async_method(
             "get_assets_by_group",
             |rpc_params, rpc_context| async move {
@@ -96,6 +103,19 @@ impl RpcApiBuilder {
         )?;
         module.register_alias("getAssetsByGroup", "get_assets_by_group")?;
 
+        // get_assets_by_authority
+        module.register_async_method(
+            "getAssetsByAuthority",
+            |rpc_params, rpc_context| async move {
+                let payload = rpc_params.parse::<GetAssetsByAuthority>()?;
+                rpc_context
+                    .get_assets_by_authority(payload)
+                    .await
+                    .map_err(Into::into)
+            },
+        )?;
+
+        // get_asset_signatures / get_signatures_for_asset
         module.register_async_method(
             "getAssetSignatures",
             |rpc_params, rpc_context| async move {
@@ -108,6 +128,31 @@ impl RpcApiBuilder {
         )?;
         module.register_alias("getSignaturesForAsset", "getAssetSignatures")?;
 
+        // get_token_accounts
+        module.register_async_method("getTokenAccounts", |rpc_params, rpc_context| async move {
+            let payload = rpc_params.parse::<GetTokenAccounts>()?;
+            rpc_context
+                .get_token_accounts(payload)
+                .await
+                .map_err(Into::into)
+        })?;
+
+        // get_nft_editions
+        module.register_async_method("getNftEditions", |rpc_params, rpc_context| async move {
+            let payload = rpc_params.parse::<GetNftEditions>()?;
+            rpc_context
+                .get_nft_editions(payload)
+                .await
+                .map_err(Into::into)
+        })?;
+
+        // search_owners
+        module.register_async_method("searchOwners", |rpc_params, rpc_context| async move {
+            let payload = rpc_params.parse::<SearchOwners>()?;
+            rpc_context.search_owners(payload).await.map_err(Into::into)
+        })?;
+
+        // search_assets
         module.register_async_method("search_assets", |rpc_params, rpc_context| async move {
             let payload = rpc_params.parse::<SearchAssets>()?;
             rpc_context.search_assets(payload).await.map_err(Into::into)
@@ -117,6 +162,8 @@ impl RpcApiBuilder {
         module.register_async_method("schema", |_, rpc_context| async move {
             Ok(rpc_context.schema())
         })?;
+        module.register_alias("das_schema", "schema")?;
+        module.register_alias("dasSchema", "schema")?;
 
         Ok(module)
     }

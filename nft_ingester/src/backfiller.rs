@@ -8,7 +8,7 @@ use digital_asset_types::dao::backfill_items;
 use flatbuffers::FlatBufferBuilder;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
-use plerkle_messenger::{Messenger, TRANSACTION_BACKFILL_STREAM};
+use plerkle_messenger::{Messenger, TRANSACTION_STREAM};
 use plerkle_serialization::serializer::seralize_encoded_transaction_with_status;
 
 use sea_orm::{
@@ -22,20 +22,19 @@ use solana_client::{
     rpc_config::{RpcAccountInfoConfig, RpcBlockConfig, RpcProgramAccountsConfig},
     rpc_filter::{Memcmp, RpcFilterType},
 };
-use solana_sdk::{
-    account::Account,
-    commitment_config::{CommitmentConfig, CommitmentLevel},
-    pubkey::Pubkey,
-    signature::Signature,
-    slot_history::Slot,
+use mpl_account_compression::state::{
+    merkle_tree_get_size, ConcurrentMerkleTreeHeader, CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1,
 };
+use solana_commitment_config::{CommitmentConfig, CommitmentLevel};
+use solana_sdk::{account::Account, pubkey::Pubkey, signature::Signature, slot_history::Slot};
 use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedConfirmedBlock,
     EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding,
 };
-use spl_account_compression::state::{
-    merkle_tree_get_size, ConcurrentMerkleTreeHeader, CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1,
-};
+
+/// SPL Account Compression program ID -- `cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK`.
+const SPL_ACCOUNT_COMPRESSION_ID: Pubkey =
+    solana_sdk::pubkey!("cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK");
 use sqlx::{self, Pool, Postgres};
 use std::{
     cmp,
@@ -66,6 +65,7 @@ const BLOCK_CACHE_SIZE: usize = 300_000;
 const MAX_CACHE_COST: i64 = 32;
 const BLOCK_CACHE_DURATION: u64 = 172800;
 
+#[allow(unused)]
 struct SlotSeq(u64, u64);
 /// Main public entry point for backfiller task.
 pub fn setup_backfiller<T: Messenger>(
@@ -129,6 +129,7 @@ struct UniqueTree {
 #[derive(Debug, FromQueryResult)]
 struct TreeWithSlot {
     tree: Vec<u8>,
+    #[allow(dead_code)]
     slot: i64,
 }
 
@@ -142,16 +143,13 @@ struct MissingTree {
 struct BackfillTree {
     unique_tree: UniqueTree,
     backfill_from_seq_1: bool,
-    #[allow(dead_code)]
-    slot: u64,
 }
 
 impl BackfillTree {
-    const fn new(unique_tree: UniqueTree, backfill_from_seq_1: bool, slot: u64) -> Self {
+    fn new(unique_tree: UniqueTree, backfill_from_seq_1: bool) -> Self {
         Self {
             unique_tree,
             backfill_from_seq_1,
-            slot,
         }
     }
 }
@@ -177,14 +175,13 @@ struct GapInfo {
 }
 
 impl GapInfo {
-    const fn new(prev: SimpleBackfillItem, curr: SimpleBackfillItem) -> Self {
+    fn new(prev: SimpleBackfillItem, curr: SimpleBackfillItem) -> Self {
         Self { prev, curr }
     }
 }
 
 /// Main struct used for backfiller task.
 struct Backfiller<'a, T: Messenger> {
-    config: IngesterConfig,
     db: DatabaseConnection,
     rpc_client: RpcClient,
     rpc_block_config: RpcBlockConfig,
@@ -249,7 +246,8 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let rpc_block_config = RpcBlockConfig {
             encoding: Some(UiTransactionEncoding::Base64),
             commitment: Some(rpc_commitment),
-            max_supported_transaction_version: Some(0),
+            // >= 1 or getBlock errors on blocks with v1 txs (SIMD-0296)
+            max_supported_transaction_version: Some(1),
             ..RpcBlockConfig::default()
         };
 
@@ -257,17 +255,13 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let rpc_client = RpcClient::new_with_commitment(rpc_url, rpc_commitment);
 
         // Instantiate messenger.
-        let mut messenger = T::new(config.get_messneger_client_config()).await.unwrap();
+        let mut messenger = T::new(config.get_messenger_client_config()).await.unwrap();
+        messenger.add_stream(TRANSACTION_STREAM).await.unwrap();
         messenger
-            .add_stream(TRANSACTION_BACKFILL_STREAM)
-            .await
-            .unwrap();
-        messenger
-            .set_buffer_size(TRANSACTION_BACKFILL_STREAM, 10_000_000)
+            .set_buffer_size(TRANSACTION_STREAM, 10_000_000)
             .await;
 
         Self {
-            config,
             db,
             rpc_client,
             rpc_block_config,
@@ -462,19 +456,6 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
     ) -> Result<Vec<MissingTree>, IngesterError> {
         let mut all_trees: HashMap<Pubkey, SlotSeq> = self.fetch_trees_by_gpa().await?;
         debug!("Number of Trees on Chain {}", all_trees.len());
-
-        if let Some(only_trees) = &self.config.backfiller_trees {
-            let mut trees = HashSet::with_capacity(only_trees.len());
-            for tree in only_trees {
-                trees.insert(Pubkey::try_from(tree.as_str()).expect("backfiller tree is invalid"));
-            }
-
-            all_trees.retain(|key, _value| trees.contains(key));
-            info!(
-                "Number of Trees to backfill (with only filter): {}",
-                all_trees.len()
-            );
-        }
         let get_locked_or_failed_trees = Statement::from_string(
             DbBackend::Postgres,
             "SELECT DISTINCT tree FROM backfill_items WHERE failed = true\n\
@@ -484,15 +465,13 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let locked_trees = cn.query_all(get_locked_or_failed_trees).await?;
         for row in locked_trees.into_iter() {
             let tree = UniqueTree::from_query_result(&row, "")?;
-            let key = Pubkey::try_from(tree.tree.as_slice()).unwrap();
-            all_trees.remove(&key);
+            let key = &Pubkey::try_from(tree.tree).map_err(|_e| {
+                IngesterError::RpcDataUnsupportedFormat(format!("Failed to parse pubkey"))
+            })?;
+            if all_trees.contains_key(key) {
+                all_trees.remove(key);
+            }
         }
-        info!(
-            "Number of Trees to backfill (with failed/locked filter): {}",
-            all_trees.len()
-        );
-
-        // Get all the local trees already in cl_items and remove them
         let get_all_local_trees = Statement::from_string(
             DbBackend::Postgres,
             "SELECT DISTINCT cl_items.tree FROM cl_items".to_string(),
@@ -500,21 +479,18 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         let force_chk_trees = cn.query_all(get_all_local_trees).await?;
         for row in force_chk_trees.into_iter() {
             let tree = UniqueTree::from_query_result(&row, "")?;
-            let key = Pubkey::try_from(tree.tree.as_slice()).unwrap();
-            all_trees.remove(&key);
+            let key = &Pubkey::try_from(tree.tree).map_err(|_e| {
+                IngesterError::RpcDataUnsupportedFormat(format!("Failed to parse pubkey"))
+            })?;
+            if all_trees.contains_key(key) {
+                all_trees.remove(key);
+            }
         }
-        info!(
-            "Number of Trees to backfill (with cl_items existed filter): {}",
-            all_trees.len()
-        );
-
-        // After removing all the tres in backfill_itemsa nd the trees already in CL Items then return the list
-        // of missing trees
         let missing_trees = all_trees
             .into_iter()
             .map(|(k, s)| MissingTree { tree: k, slot: s.0 })
             .collect::<Vec<MissingTree>>();
-        if !missing_trees.is_empty() {
+        if missing_trees.len() > 0 {
             info!("Number of Missing local trees: {}", missing_trees.len());
         } else {
             debug!("No missing trees");
@@ -610,13 +586,13 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         // Convert force check trees Vec of `UniqueTree` to a Vec of `BackfillTree` (which contain extra info).
         let mut trees: Vec<BackfillTree> = force_chk_trees
             .into_iter()
-            .map(|tree| BackfillTree::new(UniqueTree { tree: tree.tree }, true, tree.slot as u64))
+            .map(|tree| BackfillTree::new(UniqueTree { tree: tree.tree }, true))
             .collect();
 
         // Convert multi-row trees Vec of `UniqueTree` to a Vec of `BackfillTree` (which contain extra info).
         let mut multi_row_trees: Vec<BackfillTree> = multi_row_trees
             .into_iter()
-            .map(|tree| BackfillTree::new(UniqueTree { tree: tree.tree }, false, tree.slot as u64))
+            .map(|tree| BackfillTree::new(UniqueTree { tree: tree.tree }, false))
             .collect();
 
         trees.append(&mut multi_row_trees);
@@ -628,15 +604,9 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         &mut self,
         btree: &BackfillTree,
     ) -> Result<Option<i64>, IngesterError> {
-        let address = match Pubkey::try_from(btree.unique_tree.tree.as_slice()) {
-            Ok(pubkey) => pubkey,
-            Err(error) => {
-                return Err(IngesterError::DeserializationError(format!(
-                    "failed to parse pubkey: {error:?}"
-                )))
-            }
-        };
-
+        let address = Pubkey::try_from(btree.unique_tree.tree.as_slice()).map_err(|_e| {
+            IngesterError::RpcDataUnsupportedFormat("Failed to parse pubkey".to_string())
+        })?;
         let slots = self.find_slots_via_address(&address).await?;
         let address = btree.unique_tree.tree.clone();
         for slot in slots {
@@ -701,21 +671,6 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         Ok(Vec::from_iter(slots))
     }
 
-    #[allow(dead_code)]
-    async fn get_max_seq(&self, tree: &[u8]) -> Result<Option<i64>, DbErr> {
-        let query = backfill_items::Entity::find()
-            .select_only()
-            .column(backfill_items::Column::Seq)
-            .filter(backfill_items::Column::Tree.eq(tree))
-            .order_by_desc(backfill_items::Column::Seq)
-            .limit(1)
-            .build(DbBackend::Postgres);
-
-        let start_seq_vec = MaxSeqItem::find_by_statement(query).all(&self.db).await?;
-
-        Ok(start_seq_vec.last().map(|row| row.seq))
-    }
-
     async fn clear_force_chk_flag(&self, tree: &[u8]) -> Result<UpdateResult, DbErr> {
         backfill_items::Entity::update_many()
             .col_expr(backfill_items::Column::ForceChk, Expr::value(false))
@@ -738,9 +693,24 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
         };
         let results: Vec<(Pubkey, Account)> = self
             .rpc_client
-            .get_program_accounts_with_config(&spl_account_compression::id(), config)
+            .get_program_ui_accounts_with_config(&SPL_ACCOUNT_COMPRESSION_ID, config)
             .await
-            .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;
+            .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?
+            .into_iter()
+            .map(|(pubkey, ui_account)| {
+                let err = || {
+                    IngesterError::RpcGetDataError(format!("Failed to decode account {pubkey}"))
+                };
+                let account = Account {
+                    lamports: ui_account.lamports,
+                    data: ui_account.data.decode().ok_or_else(err)?,
+                    owner: Pubkey::from_str(&ui_account.owner).map_err(|_| err())?,
+                    executable: ui_account.executable,
+                    rent_epoch: ui_account.rent_epoch,
+                };
+                Ok((pubkey, account))
+            })
+            .collect::<Result<Vec<_>, IngesterError>>()?;
         let mut list = HashMap::with_capacity(results.len());
         for r in results.into_iter() {
             let (pubkey, mut account) = r;
@@ -748,10 +718,10 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                 .data
                 .split_at_mut(CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1);
             let header: ConcurrentMerkleTreeHeader =
-                ConcurrentMerkleTreeHeader::try_from_slice(header_bytes)
+                BorshDeserialize::deserialize(&mut &header_bytes[..])
                     .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;
 
-            let auth = Pubkey::find_program_address(&[pubkey.as_ref()], &mpl_bubblegum::ID).0;
+            let auth = Pubkey::find_program_address(&[pubkey.as_ref()], &solana_sdk::pubkey::Pubkey::new_from_array(mpl_bubblegum::ID.to_bytes())).0;
 
             let merkle_tree_size = merkle_tree_get_size(&header)
                 .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;
@@ -875,12 +845,12 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
             .flatten();
         for slot in result_slots {
             let key = format!("block{}", slot);
-            let mut cached_block = self.cache.get(&key);
+            let mut cached_block = self.cache.get(&key).await;
             if cached_block.is_none() {
                 debug!("Fetching block {} from RPC", slot);
                 let block = EncodedConfirmedBlock::from(
                     self.rpc_client
-                        .get_block_with_config(slot, self.rpc_block_config)
+                        .get_block_with_config(slot as u64, self.rpc_block_config)
                         .await
                         .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?,
                 );
@@ -902,7 +872,7 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                     )));
                 }
                 self.cache.wait().await?;
-                cached_block = self.cache.get(&key);
+                cached_block = self.cache.get(&key).await;
             }
             if cached_block.is_none() {
                 return Err(IngesterError::CacheStorageWriteError(format!(
@@ -966,8 +936,10 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                 // Filter out transactions that don't have to do with the tree we are interested in or
                 // the Bubblegum program.
                 let tb = tree.to_bytes();
-                let bubblegum = blockbuster::programs::bubblegum::ID.to_bytes();
-                if account_keys.iter().all(|pk| *pk != tb && *pk != bubblegum) {
+                if account_keys
+                    .iter()
+                    .all(|pk| *pk != tb && *pk != mpl_bubblegum::ID.to_bytes())
+                {
                     continue;
                 }
 
@@ -978,10 +950,11 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                     transaction: tx.to_owned(),
                     slot,
                     block_time: block_data.block_time,
+                    transaction_index: None,
                 };
                 let builder = seralize_encoded_transaction_with_status(builder, tx_wrap)?;
                 self.messenger
-                    .send(TRANSACTION_BACKFILL_STREAM, builder.finished_data())
+                    .send(TRANSACTION_STREAM, builder.finished_data())
                     .await?;
             }
             drop(block_ref);

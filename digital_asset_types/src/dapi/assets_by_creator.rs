@@ -1,25 +1,32 @@
+use super::common::{build_asset_response, create_pagination, create_sorting};
 use crate::dao::scopes;
+use crate::dao::scopes::asset::add_collection_metadata;
 use crate::dao::PageOptions;
+use crate::dapi::last_indexed_slot::load_last_indexed_slot;
+use crate::feature_flag::FeatureFlags;
 use crate::rpc::filter::AssetSorting;
 use crate::rpc::options::Options;
 use crate::rpc::response::AssetList;
 use sea_orm::DatabaseConnection;
 use sea_orm::DbErr;
 
-use super::common::{build_asset_response, create_pagination, create_sorting};
-
-#[allow(clippy::too_many_arguments)]
 pub async fn get_assets_by_creator(
     db: &DatabaseConnection,
     creator: Vec<u8>,
     only_verified: bool,
     sorting: AssetSorting,
     page_options: &PageOptions,
+    feature_flags: &FeatureFlags,
     options: &Options,
 ) -> Result<AssetList, DbErr> {
-    let pagination = create_pagination(page_options)?;
+    let last_indexed_slot = load_last_indexed_slot(db).await?;
+    let pagination = create_pagination(&page_options)?;
     let (sort_direction, sort_column) = create_sorting(sorting);
-    let assets = scopes::asset::get_by_creator(
+
+    let enable_grand_total_query =
+        feature_flags.enable_grand_total_query && options.show_grand_total;
+
+    let (assets, grand_total) = scopes::asset::get_by_creator(
         db,
         creator,
         only_verified,
@@ -27,13 +34,22 @@ pub async fn get_assets_by_creator(
         sort_direction,
         &pagination,
         page_options.limit,
-        options.show_unverified_collections,
+        enable_grand_total_query,
+        options,
     )
     .await?;
-    Ok(build_asset_response(
+
+    let mut asset_list = build_asset_response(
+        last_indexed_slot,
         assets,
         page_options.limit,
+        grand_total,
         &pagination,
         options,
-    ))
+    );
+    if options.show_collection_metadata && feature_flags.enable_collection_metadata {
+        add_collection_metadata(db, &mut asset_list.items).await?;
+    }
+
+    Ok(asset_list)
 }
