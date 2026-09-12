@@ -1,0 +1,95 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "HbxiDXQxBKMNJqDsTavQE7LVwrTR36wjV2EaYEqUw6qH",
+  "items": [
+    {
+      "interface": "FungibleToken",
+      "id": "HbxiDXQxBKMNJqDsTavQE7LVwrTR36wjV2EaYEqUw6qH",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://bafybeialzeyqbeg7fzhebnknqxancgx3fi7n6xa4uq5lny62sa4xsuouiy.ipfs.dweb.link",
+        "files": [],
+        "metadata": {
+          "name": "GH0ST",
+          "symbol": "GH0ST"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "E8E6GvyCpbGu7YSFxfhTXGx6SW4VhzVmxWh3gbrgXZNd",
+          "scopes": [
+            "metadata"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "token",
+        "owner": "E8E6GvyCpbGu7YSFxfhTXGx6SW4VhzVmxWh3gbrgXZNd"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "mint_extensions": {
+        "metadata": {
+          "uri": "https://bafybeialzeyqbeg7fzhebnknqxancgx3fi7n6xa4uq5lny62sa4xsuouiy.ipfs.dweb.link",
+          "mint": "HbxiDXQxBKMNJqDsTavQE7LVwrTR36wjV2EaYEqUw6qH",
+          "name": "GH0ST",
+          "symbol": "GH0ST",
+          "update_authority": "E8E6GvyCpbGu7YSFxfhTXGx6SW4VhzVmxWh3gbrgXZNd",
+          "additional_metadata": []
+        },
+        "group_pointer": {
+          "authority": "E8E6GvyCpbGu7YSFxfhTXGx6SW4VhzVmxWh3gbrgXZNd",
+          "group_address": "HbxiDXQxBKMNJqDsTavQE7LVwrTR36wjV2EaYEqUw6qH"
+        },
+        "metadata_pointer": {
+          "authority": "E8E6GvyCpbGu7YSFxfhTXGx6SW4VhzVmxWh3gbrgXZNd",
+          "metadata_address": "HbxiDXQxBKMNJqDsTavQE7LVwrTR36wjV2EaYEqUw6qH"
+        }
+      },
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "fWs2yNmUsghmsKXpJ6XqcvAjcmaCuXra3W8kHqBAiUm",
+            "balance": 3642000000000000
+          }
+        ],
+        "balance": 3642000000000000,
+        "supply": "[supply]",
+        "decimals": 9,
+        "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        "associated_token_address": "fWs2yNmUsghmsKXpJ6XqcvAjcmaCuXra3W8kHqBAiUm"
+      }
+    }
+  ]
+}

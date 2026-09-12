@@ -1,0 +1,103 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "FungibleToken",
+  "id": "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://xstocks-metadata.backed.fi/tokens/Solana/MCDx/metadata.json",
+    "files": [],
+    "metadata": {
+      "name": "McDonald's xStock",
+      "symbol": "MCDx"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+      "scopes": [
+        "metadata"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "token",
+    "owner": ""
+  },
+  "supply": null,
+  "mutable": true,
+  "burnt": false,
+  "mint_extensions": {
+    "metadata": {
+      "uri": "https://xstocks-metadata.backed.fi/tokens/Solana/MCDx/metadata.json",
+      "mint": "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2",
+      "name": "McDonald's xStock",
+      "symbol": "MCDx",
+      "update_authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+      "additional_metadata": []
+    },
+    "transfer_hook": {
+      "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+      "program_id": null
+    },
+    "pausable_config": {
+      "paused": false,
+      "authority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs"
+    },
+    "metadata_pointer": {
+      "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+      "metadata_address": "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2"
+    },
+    "permanent_delegate": {
+      "delegate": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq"
+    },
+    "default_account_state": {
+      "state": 1
+    },
+    "scaled_ui_amount_config": {
+      "authority": "S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS",
+      "multiplier": 1.0,
+      "new_multiplier": 1.0,
+      "new_multiplier_effective_timestamp": 0
+    },
+    "confidential_transfer_mint": {
+      "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+      "auditor_elgamal_pubkey": null,
+      "auto_approve_new_accounts": false
+    }
+  },
+  "token_info": {
+    "supply": "[supply]",
+    "decimals": 8,
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "mint_authority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs",
+    "freeze_authority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs"
+  }
+}

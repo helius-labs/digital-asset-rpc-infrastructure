@@ -5,7 +5,11 @@ mod assets_by_owner;
 mod change_logs;
 mod get_asset;
 mod get_asset_signatures;
+mod get_nft_editions;
+mod get_token_accounts;
 mod search_assets;
+mod search_owners;
+mod last_indexed_slot;
 
 pub mod common;
 
@@ -16,4 +20,7 @@ pub use assets_by_owner::*;
 pub use change_logs::*;
 pub use get_asset::*;
 pub use get_asset_signatures::*;
+pub use get_nft_editions::*;
+pub use get_token_accounts::*;
 pub use search_assets::*;
+pub use search_owners::*;

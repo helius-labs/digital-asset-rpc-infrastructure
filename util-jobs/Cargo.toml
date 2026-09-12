@@ -1,0 +1,34 @@
+[package]
+edition = "2021"
+name = "util-jobs"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+acc_forwarder = {workspace = true}
+async-stream = {workspace = true}
+bs58 = {workspace = true}
+cadence = {workspace = true}
+cadence-macros = {workspace = true}
+common = {workspace = true}
+digital_asset_types = {workspace = true}
+figment = {workspace = true}
+futures = {workspace = true}
+log = {workspace = true}
+mpl-token-metadata = {workspace = true}
+nft_ingester = {workspace = true}
+plerkle_messenger = {workspace = true}
+sea-orm = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+solana-account-decoder = {workspace = true}
+solana-client = {workspace = true}
+solana-rpc-client-api = {workspace = true}
+solana-commitment-config = {workspace = true}
+solana-sdk = {workspace = true}
+spl-token = {workspace = true}
+sqlx = {workspace = true}
+thiserror = {workspace = true}
+tokio = {workspace = true}
+tokio-retry = {workspace = true}

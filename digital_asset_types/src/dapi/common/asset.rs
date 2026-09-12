@@ -1,29 +1,52 @@
+use crate::dao::owners;
+use crate::dao::sea_orm_active_enums::EditionAccountType;
 use crate::dao::sea_orm_active_enums::SpecificationVersions;
+use crate::dao::AssetMetadata;
 use crate::dao::FullAsset;
 use crate::dao::PageOptions;
 use crate::dao::Pagination;
-use crate::dao::{asset, asset_authority, asset_creators, asset_data, asset_grouping};
+use crate::dao::{asset, asset_creators};
+use crate::rpc::filter::TokenSortBy;
+use crate::rpc::filter::TokenSortDirection;
+use crate::rpc::filter::TokenSorting;
 use crate::rpc::filter::{AssetSortBy, AssetSortDirection, AssetSorting};
 use crate::rpc::options::Options;
-use crate::rpc::response::TransactionSignatureList;
-use crate::rpc::response::{AssetError, AssetList};
+use crate::rpc::response::OwnerList;
+use crate::rpc::response::TokenAccountsList;
+use crate::rpc::response::{AssetError, AssetList, TransactionSignatureList};
+use crate::rpc::MplCoreInfo;
+use crate::rpc::Owner;
+use crate::rpc::SystemInfo;
+use crate::rpc::TokenAccount;
 use crate::rpc::{
-    Asset as RpcAsset, Authority, Compression, Content, Creator, File, Group, Interface,
-    MetadataMap, Ownership, Royalty, Scope, Supply, Uses,
+    Asset as RpcAsset, Compression, Content, Creator, File, Group, Interface, MetadataMap,
+    Ownership, Royalty, Supply, Uses,
 };
+use chrono::Utc;
 use jsonpath_lib::JsonPathError;
 use log::warn;
 use mime_guess::Mime;
 
 use sea_orm::DbErr;
+use serde_json::Map;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::Path;
 use url::Url;
 
+use once_cell::sync::Lazy;
+use serde_json;
+
+// https://github.com/solana-labs/token-list
+pub static LEGACY_TOKEN_IMAGES: Lazy<HashMap<String, String>> = Lazy::new(|| {
+    let json_data_bytes = include_bytes!("../legacy_token_metadata/address_to_logo_uri.json");
+    let json_data_str = std::str::from_utf8(json_data_bytes).unwrap();
+    serde_json::from_str(&json_data_str).unwrap()
+});
+
 pub fn to_uri(uri: String) -> Option<Url> {
-    Url::parse(&uri).ok()
+    Url::parse(&*uri).ok()
 }
 
 pub fn get_mime(url: Url) -> Option<Mime> {
@@ -41,6 +64,7 @@ pub fn file_from_str(str: String) -> File {
     let mime = get_mime_type_from_uri(str.clone());
     File {
         uri: Some(str),
+        cdn_uri: None,
         mime: Some(mime),
         quality: None,
         contexts: None,
@@ -48,8 +72,10 @@ pub fn file_from_str(str: String) -> File {
 }
 
 pub fn build_asset_response(
+    last_indexed_slot: u64,
     assets: Vec<FullAsset>,
     limit: u64,
+    grand_total: Option<u64>,
     pagination: &Pagination,
     options: &Options,
 ) -> AssetList {
@@ -73,6 +99,8 @@ pub fn build_asset_response(
 
     let (items, errors) = asset_list_to_rpc(assets, options);
     AssetList {
+        last_indexed_slot,
+        grand_total,
         total,
         limit: limit as u32,
         page: page.map(|x| x as u32),
@@ -81,10 +109,12 @@ pub fn build_asset_response(
         items,
         errors,
         cursor,
+        nativeBalance: None,
     }
 }
 
 pub fn build_transaction_signatures_response(
+    last_indexed_slot: u64,
     items: Vec<(String, String)>,
     limit: u64,
     pagination: &Pagination,
@@ -100,12 +130,62 @@ pub fn build_transaction_signatures_response(
         Pagination::Cursor { .. } => (None, None, None),
     };
     TransactionSignatureList {
+        last_indexed_slot,
         total,
         limit: limit as u32,
         page: page.map(|x| x as u32),
         before,
         after,
         items,
+    }
+}
+
+pub fn build_owner_response(last_indexed_slot: u64, owners: Vec<Owner>, limit: u64, pagination: &Pagination) -> OwnerList {
+    let total = owners.len() as u32;
+    let page = match pagination {
+        Pagination::Page { page } => Some(*page as u32),
+        _ => None,
+    };
+    OwnerList {
+        last_indexed_slot,
+        total,
+        limit: limit as u32,
+        page,
+        owners,
+    }
+}
+
+pub fn build_token_account_response(
+    last_indexed_slot: u64,
+    token_accounts: Vec<TokenAccount>,
+    limit: u64,
+    pagination: &Pagination,
+) -> TokenAccountsList {
+    let total = token_accounts.len() as u32;
+    let (page, before, after, cursor) = match pagination {
+        Pagination::Keyset { before, after } => {
+            let bef = before.clone().and_then(|x| String::from_utf8(x).ok());
+            let aft = after.clone().and_then(|x| String::from_utf8(x).ok());
+            (None, bef, aft, None)
+        }
+        Pagination::Page { page } => (Some(*page as u32), None, None, None),
+        Pagination::Cursor(_) => {
+            if let Some(last_token) = token_accounts.last() {
+                (None, None, None, Some(last_token.address.clone()))
+            } else {
+                (None, None, None, None)
+            }
+        }
+    };
+    TokenAccountsList {
+        last_indexed_slot,
+        total,
+        limit: limit as u32,
+        page,
+        token_accounts,
+        before,
+        after,
+        cursor,
     }
 }
 
@@ -120,6 +200,37 @@ pub fn create_sorting(sorting: AssetSorting) -> (sea_orm::query::Order, Option<a
     let sort_direction = match sorting.sort_direction.unwrap_or_default() {
         AssetSortDirection::Desc => sea_orm::query::Order::Desc,
         AssetSortDirection::Asc => sea_orm::query::Order::Asc,
+    };
+    (sort_direction, sort_column)
+}
+
+pub fn create_owner_sorting(
+    sorting: AssetSorting,
+) -> (sea_orm::query::Order, Option<owners::Column>) {
+    let sort_column = match sorting.sort_by {
+        AssetSortBy::Id => Some(owners::Column::Mint),
+        AssetSortBy::Created => Some(owners::Column::CreatedAt),
+        AssetSortBy::Updated => Some(owners::Column::SlotUpdated),
+        AssetSortBy::RecentAction => Some(owners::Column::SlotUpdated),
+        AssetSortBy::None => None,
+    };
+    let sort_direction = match sorting.sort_direction.unwrap_or_default() {
+        AssetSortDirection::Desc => sea_orm::query::Order::Desc,
+        AssetSortDirection::Asc => sea_orm::query::Order::Asc,
+    };
+    (sort_direction, sort_column)
+}
+
+pub fn create_token_sorting(
+    sorting: TokenSorting,
+) -> (sea_orm::query::Order, Option<owners::Column>) {
+    let sort_column = match sorting.sort_by {
+        TokenSortBy::TokenAccount => Some(owners::Column::TokenAccount),
+        TokenSortBy::None => None,
+    };
+    let sort_direction = match sorting.sort_direction.unwrap_or_default() {
+        TokenSortDirection::Desc => sea_orm::query::Order::Desc,
+        TokenSortDirection::Asc => sea_orm::query::Order::Asc,
     };
     (sort_direction, sort_column)
 }
@@ -169,7 +280,51 @@ pub fn safe_select<'a>(
         .and_then(|v| v.pop())
 }
 
-pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, DbErr> {
+fn process_raw_fields(
+    name: &Option<Vec<u8>>,
+    symbol: &Option<Vec<u8>>,
+) -> (Option<String>, Option<String>) {
+    let name_result = name
+        .as_ref()
+        .and_then(|name| String::from_utf8(name.clone()).ok());
+    let symbol_result = symbol
+        .as_ref()
+        .and_then(|symbol| String::from_utf8(symbol.clone()).ok());
+    (name_result, symbol_result)
+}
+
+// https://github.com/solana-labs/token-list
+pub fn add_legacy_token_datadata(content: Content, mint: &Vec<u8>, options: &Options) -> Content {
+    let mint = bs58::encode(mint).into_string();
+    let mut files = content.files.clone().unwrap_or(Vec::new());
+    let mut links = content.links.clone().unwrap_or(HashMap::new());
+    if files.len() > 0 || links.get("image").is_some() {
+        content
+    } else {
+        if let Some(image) = LEGACY_TOKEN_IMAGES.get(&mint) {
+            let file = file_from_str(image.to_string());
+            files.push(file);
+            links.insert(
+                "image".to_string(),
+                serde_json::Value::String(image.to_string()),
+            );
+        }
+        enrich_files_with_cdn(&mut files, &options.cdn_prefix);
+        Content {
+            schema: content.schema,
+            json_uri: content.json_uri,
+            files: Some(files),
+            metadata: content.metadata,
+            links: Some(links),
+            category: content.category,
+        }
+    }
+}
+
+pub fn v1_content_from_json(
+    asset_data: &AssetMetadata,
+    options: &Options,
+) -> Result<Content, DbErr> {
     // todo -> move this to the bg worker for pre processing
     let json_uri = asset_data.metadata_url.clone();
     let metadata = &asset_data.metadata;
@@ -178,13 +333,33 @@ pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, D
     let selector = &mut selector_fn;
     let chain_data_selector = &mut chain_data_selector_fn;
     let mut meta: MetadataMap = MetadataMap::new();
-    let name = safe_select(chain_data_selector, "$.name");
-    if let Some(name) = name {
-        meta.set_item("name", name.clone());
+    if options.show_raw_data {
+        let (name, symbol) = process_raw_fields(&asset_data.raw_name, &asset_data.raw_symbol);
+        if let Some(name) = name {
+            meta.set_item("name", name.into());
+        }
+        if let Some(symbol) = symbol {
+            meta.set_item("symbol", symbol.into());
+        }
+    } else {
+        let name = safe_select(chain_data_selector, "$.name");
+        if let Some(name) = name {
+            meta.set_item("name", name.clone());
+        }
+        let symbol = safe_select(chain_data_selector, "$.symbol");
+        if let Some(symbol) = symbol {
+            meta.set_item("symbol", symbol.clone());
+        }
     }
-    let symbol = safe_select(chain_data_selector, "$.symbol");
-    if let Some(symbol) = symbol {
-        meta.set_item("symbol", symbol.clone());
+    let token_standard = safe_select(chain_data_selector, "$.token_standard");
+    if let Some(token_standard) = token_standard {
+        meta.set_item("token_standard", token_standard.clone());
+    }
+    // The on-chain name is capped at 32 bytes; expose the untruncated off-chain
+    // name alongside it. Unverified — sourced from creator-controlled JSON.
+    let json_name = safe_select(selector, "$.name");
+    if let Some(json_name) = json_name {
+        meta.set_item("json_name", json_name.clone());
     }
     let desc = safe_select(selector, "$.description");
     if let Some(desc) = desc {
@@ -192,11 +367,20 @@ pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, D
     }
     let symbol = safe_select(selector, "$.attributes");
     if let Some(symbol) = symbol {
-        meta.set_item("attributes", symbol.clone());
-    }
-    let token_standard = safe_select(chain_data_selector, "$.token_standard");
-    if let Some(token_standard) = token_standard {
-        meta.set_item("token_standard", token_standard.clone());
+        match symbol {
+            Value::String(s) => match serde_json::from_str(s) {
+                // Handle the case where the attributes are a stringified JSON object.
+                Ok(v) => {
+                    meta.set_item("attributes", v);
+                }
+                Err(_) => {
+                    meta.set_item("attributes", symbol.clone());
+                }
+            },
+            _ => {
+                meta.set_item("attributes", symbol.clone());
+            }
+        }
     }
     let mut links = HashMap::new();
     let link_fields = vec!["image", "animation_url", "external_url"];
@@ -206,7 +390,7 @@ pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, D
             links.insert(f.to_string(), l.to_owned());
         }
     }
-    let _metadata = safe_select(selector, "description");
+    let category = safe_select(selector, "$.properties.category").cloned();
     let mut actual_files: HashMap<String, File> = HashMap::new();
     if let Some(files) = selector("$.properties.files[*]")
         .ok()
@@ -226,6 +410,7 @@ pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, D
                             let file = if let Some(str_mime) = m.as_str() {
                                 File {
                                     uri: Some(str_uri.to_string()),
+                                    cdn_uri: None,
                                     mime: Some(str_mime.to_string()),
                                     quality: None,
                                     contexts: None,
@@ -268,34 +453,98 @@ pub fn v1_content_from_json(asset_data: &asset_data::Model) -> Result<Content, D
         }
         _ => Ordering::Equal,
     });
+    enrich_files_with_cdn(&mut files, &options.cdn_prefix);
 
     Ok(Content {
         schema: "https://schema.metaplex.com/nft1.0.json".to_string(),
-        json_uri,
-        files: Some(files),
+        json_uri: replace_cloudfare_ipfs(&json_uri),
+        files: Some(
+            files
+                .iter()
+                .map(|file| {
+                    let mut file = file.clone();
+                    file.uri = file.uri.map(|uri| replace_cloudfare_ipfs(uri.as_str()));
+                    file
+                })
+                .collect(),
+        ),
         metadata: meta,
-        links: Some(links),
+        links: Some(
+            links
+                .into_iter()
+                .map(|(k, v)| {
+                    let string = v.as_str();
+                    match string {
+                        Some(string) => {
+                            (k, serde_json::Value::String(replace_cloudfare_ipfs(string)))
+                        }
+                        None => (k, v),
+                    }
+                })
+                .collect(),
+        ),
+        category,
     })
 }
 
-pub fn get_content(asset: &asset::Model, data: &asset_data::Model) -> Result<Content, DbErr> {
+// Cloudfare IPFS URIs are deprecated and should be replaced with ipfs.io
+pub fn replace_cloudfare_ipfs(uri: &str) -> String {
+    let new_uri = uri.replace("https://cloudflare-ipfs.com/ipfs/", "https://ipfs.io/ipfs/");
+    new_uri.replace("https://cf-ipfs.com/ipfs/", "https://ipfs.io/ipfs/")
+}
+
+fn enrich_files_with_cdn(files: &mut Vec<File>, cdn_prefix: &Option<String>) {
+    if let Some(cdn_prefix) = cdn_prefix {
+        let cdn_options = ""; // Placeholder for potential future options
+
+        files.iter_mut().for_each(|file| {
+            if let (Some(uri), Some(mime)) = (&file.uri, &file.mime) {
+                if mime.starts_with("image/") {
+                    file.cdn_uri = Some(format!(
+                        "{}/{}/{}",
+                        cdn_prefix.trim_end_matches('/'),
+                        cdn_options,
+                        uri
+                    ));
+                }
+            }
+        });
+    }
+}
+
+fn fix_missing_images(mut content: Content) -> Content {
+    let mut links = content.links.clone().unwrap_or(HashMap::new());
+    if content.json_uri.ends_with("png")
+        || content.json_uri.ends_with("jpg")
+        || content.json_uri.ends_with("jpeg")
+    {
+        if links.get("image").is_none() {
+            links.insert(
+                "image".to_string(),
+                serde_json::Value::String(content.json_uri.clone()),
+            );
+        }
+    }
+    content.links = Some(links);
+    content
+}
+
+pub fn get_content(
+    asset: &asset::Model,
+    data: &AssetMetadata,
+    options: &Options,
+) -> Result<Content, DbErr> {
     match asset.specification_version {
         Some(SpecificationVersions::V1) | Some(SpecificationVersions::V0) => {
-            v1_content_from_json(data)
+            Ok(add_legacy_token_datadata(
+                fix_missing_images(v1_content_from_json(data, options)?),
+                &asset.id,
+                options,
+            ))
         }
         Some(_) => Err(DbErr::Custom("Version Not Implemented".to_string())),
         None => Err(DbErr::Custom("Specification version not found".to_string())),
     }
-}
-
-pub fn to_authority(authority: Vec<asset_authority::Model>) -> Vec<Authority> {
-    authority
-        .iter()
-        .map(|a| Authority {
-            address: bs58::encode(&a.authority).into_string(),
-            scopes: vec![Scope::Full],
-        })
-        .collect()
 }
 
 pub fn to_creators(creators: Vec<asset_creators::Model>) -> Vec<Creator> {
@@ -308,24 +557,23 @@ pub fn to_creators(creators: Vec<asset_creators::Model>) -> Vec<Creator> {
         })
         .collect()
 }
-
-pub fn to_grouping(
-    groups: Vec<asset_grouping::Model>,
-    options: &Options,
-) -> Result<Vec<Group>, DbErr> {
+pub fn filter_groups(groups: Vec<Group>, options: &Options) -> Result<Vec<Group>, DbErr> {
     let result: Vec<Group> = groups
         .iter()
         .filter_map(|model| {
+            // Only show verification info if requested via display options.
             let verified = match options.show_unverified_collections {
                 // Null verified indicates legacy data, meaning it is verified.
-                true => Some(model.verified),
+                true => Some(model.verified.unwrap_or(true)),
                 false => None,
             };
             // Filter out items where group_value is None.
             model.group_value.clone().map(|group_value| Group {
+                asset_id: model.asset_id.clone(),
                 group_key: model.group_key.clone(),
                 group_value: Some(group_value),
                 verified,
+                collection_metadata: None,
             })
         })
         .collect();
@@ -344,23 +592,62 @@ pub fn get_interface(asset: &asset::Model) -> Result<Interface, DbErr> {
             .ok_or(DbErr::Custom(
                 "Specification asset class not found".to_string(),
             ))?,
+        &(asset.supply as u64),
     )))
 }
 
+pub fn filter_non_null_fields(value: Option<&Value>) -> Option<Value> {
+    match value {
+        Some(Value::Null) => None,
+        Some(Value::Object(map)) => {
+            if map.values().all(|v| matches!(v, Value::Null)) {
+                None
+            } else {
+                let filtered_map: Map<String, Value> = map
+                    .into_iter()
+                    .filter(|(_k, v)| !matches!(v, Value::Null))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+
+                if filtered_map.is_empty() {
+                    None
+                } else {
+                    Some(Value::Object(filtered_map))
+                }
+            }
+        }
+        _ => value.cloned(),
+    }
+}
+
 //TODO -> impl custom error type
-pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbErr> {
+pub fn asset_to_rpc(
+    last_indexed_slot: Option<u64>,
+    asset: FullAsset,
+    options: &Options,
+) -> Result<RpcAsset, DbErr> {
     let FullAsset {
         asset,
         data,
         authorities,
         creators,
         groups,
+        token_info,
+        editions,
+        group_definition,
     } = asset;
-    let rpc_authorities = to_authority(authorities);
+    let asset_id_str = bs58::encode(asset.clone().id).into_string();
     let rpc_creators = to_creators(creators);
-    let rpc_groups = to_grouping(groups, options)?;
-    let interface = get_interface(&asset)?;
-    let content = get_content(&asset, &data)?;
+    let rpc_groups = filter_groups(groups, options)?;
+    // Hardcode interface if it's a BubblegumV2 asset that was indexed before the specific
+    // interface was created.  We infer this by checking if the asset is compressed and has
+    // a saved collection hash.
+    let interface = if asset.compressed && asset.collection_hash.is_some() {
+        Interface::MplBubblegumV2
+    } else {
+        get_interface(&asset)?
+    };
+    let content = get_content(&asset, &data, options)?;
     let mut chain_data_selector_fn = jsonpath_lib::selector(&data.chain_data);
     let chain_data_selector = &mut chain_data_selector_fn;
     let basis_points = safe_select(chain_data_selector, "$.primary_sale_happened")
@@ -368,17 +655,66 @@ pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbE
         .unwrap_or(false);
     let edition_nonce =
         safe_select(chain_data_selector, "$.edition_nonce").and_then(|v| v.as_u64());
+
+    let mint_ext = filter_non_null_fields(asset.mint_extensions.as_ref());
+    let mut supply = if let Some(edition_info) = editions {
+        match EditionAccountType::from(edition_info.edition_type.as_str()) {
+            EditionAccountType::Edition => Some(Supply {
+                edition_nonce,
+                edition_number: edition_info.edition,
+                print_current_supply: edition_info.supply.unwrap_or(0),
+                print_max_supply: edition_info.max_supply,
+                master_edition_mint: edition_info.master_edition_mint,
+            }),
+            EditionAccountType::MasterEditionV1 | EditionAccountType::MasterEditionV2 => {
+                Some(Supply {
+                    edition_nonce,
+                    print_current_supply: edition_info.supply.unwrap_or(0),
+                    print_max_supply: edition_info.max_supply,
+                    ..Default::default()
+                })
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    if supply.is_none() {
+        supply = match interface {
+            Interface::V1NFT | Interface::MplBubblegumV2 => Some(Supply {
+                edition_nonce,
+                print_current_supply: 0,
+                print_max_supply: Some(0),
+                ..Default::default()
+            }),
+            _ => None,
+        };
+    }
+
+    let mpl_core_info = match interface {
+        Interface::MplCoreAsset | Interface::MplCoreCollection | Interface::MplCoreGroup => {
+            Some(MplCoreInfo {
+                num_minted: asset.mpl_core_collection_num_minted,
+                current_size: asset.mpl_core_collection_current_size,
+                plugins_json_version: asset.mpl_core_plugins_json_version,
+            })
+        }
+        _ => None,
+    };
+
     Ok(RpcAsset {
+        last_indexed_slot,
         interface: interface.clone(),
-        id: bs58::encode(asset.id).into_string(),
+        id: asset_id_str,
         content: Some(content),
-        authorities: Some(rpc_authorities),
-        mutable: data.chain_data_mutability.into(),
+        authorities: Some(authorities),
+        mutable: data.chain_mutability.into(),
         compression: Some(Compression {
             eligible: asset.compressible,
             compressed: asset.compressed,
-            leaf_id: asset.nonce.unwrap_or(0),
-            seq: asset.seq.unwrap_or(0),
+            leaf_id: asset.nonce.unwrap_or(0 as i64),
+            seq: asset.seq.unwrap_or(0 as i64),
             tree: asset
                 .tree_id
                 .map(|s| bs58::encode(s).into_string())
@@ -395,6 +731,13 @@ pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbE
                 .creator_hash
                 .map(|e| if asset.compressed { e.trim() } else { "" }.to_string())
                 .unwrap_or_default(),
+            collection_hash: asset
+                .collection_hash
+                .map(|e| if asset.compressed { e.trim() } else { "" }.to_string()),
+            asset_data_hash: asset
+                .asset_data_hash
+                .map(|e| if asset.compressed { e.trim() } else { "" }.to_string()),
+            flags: asset.bubblegum_flags.and_then(|val| val.try_into().ok()),
         }),
         grouping: Some(rpc_groups),
         royalty: Some(Royalty {
@@ -408,6 +751,7 @@ pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbE
         creators: Some(rpc_creators),
         ownership: Ownership {
             frozen: asset.frozen,
+            non_transferable: asset.non_transferable,
             delegated: asset.delegate.is_some(),
             delegate: asset.delegate.map(|s| bs58::encode(s).into_string()),
             ownership_model: asset.owner_type.into(),
@@ -416,14 +760,7 @@ pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbE
                 .map(|o| bs58::encode(o).into_string())
                 .unwrap_or("".to_string()),
         },
-        supply: match interface {
-            Interface::V1NFT => Some(Supply {
-                edition_nonce,
-                print_current_supply: 0,
-                print_max_supply: 0,
-            }),
-            _ => None,
-        },
+        supply,
         uses: data.chain_data.get("uses").map(|u| Uses {
             use_method: u
                 .get("use_method")
@@ -435,6 +772,28 @@ pub fn asset_to_rpc(asset: FullAsset, options: &Options) -> Result<RpcAsset, DbE
             remaining: u.get("remaining").and_then(|t| t.as_u64()).unwrap_or(0),
         }),
         burnt: asset.burnt,
+        mint_extensions: mint_ext,
+        token_info,
+        group_definition,
+        system: match options.show_system_metadata {
+            true => Some(SystemInfo {
+                created_at: asset.created_at.map(|dt| dt.with_timezone(&Utc)),
+            }),
+            false => None,
+        },
+        plugins: asset.mpl_core_plugins,
+        unknown_plugins: asset.mpl_core_unknown_plugins,
+        mpl_core_info,
+        external_plugins: asset.mpl_core_external_plugins,
+        unknown_external_plugins: asset.mpl_core_unknown_external_plugins,
+        is_agent: match interface {
+            Interface::MplCoreAsset | Interface::MplCoreCollection | Interface::MplCoreGroup => {
+                Some(asset.is_agent)
+            }
+            _ => None,
+        },
+        agent_token: asset.agent_token.map(|t| bs58::encode(t).into_string()),
+        asset_signer: asset.asset_signer.map(|s| bs58::encode(s).into_string()),
     })
 }
 
@@ -446,7 +805,7 @@ pub fn asset_list_to_rpc(
         .into_iter()
         .fold((vec![], vec![]), |(mut assets, mut errors), asset| {
             let id = bs58::encode(asset.asset.id.clone()).into_string();
-            match asset_to_rpc(asset, options) {
+            match asset_to_rpc(None, asset, options) {
                 Ok(rpc_asset) => assets.push(rpc_asset),
                 Err(e) => errors.push(AssetError {
                     id,
@@ -455,4 +814,31 @@ pub fn asset_list_to_rpc(
             }
             (assets, errors)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_replace_cloudfare_ipfs() {
+        let test_cases = vec![
+            (
+                "https://cloudflare-ipfs.com/ipfs/QmTest123",
+                "https://ipfs.io/ipfs/QmTest123",
+            ),
+            (
+                "https://cf-ipfs.com/ipfs/QmAnotherTest456",
+                "https://ipfs.io/ipfs/QmAnotherTest456",
+            ),
+            (
+                "https://example.com/ipfs/QmNoChange789",
+                "https://example.com/ipfs/QmNoChange789",
+            ),
+        ];
+
+        for (input, expected) in test_cases {
+            assert_eq!(replace_cloudfare_ipfs(input), expected);
+        }
+    }
 }

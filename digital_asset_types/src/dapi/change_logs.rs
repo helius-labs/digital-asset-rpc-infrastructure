@@ -1,13 +1,26 @@
+use crate::dapi::last_indexed_slot::load_last_indexed_slot;
+use log::error;
 use sea_orm::sea_query::Expr;
 use sea_orm::{DatabaseConnection, DbBackend};
 use std::collections::HashMap;
+
 use {
     crate::dao::asset,
     crate::dao::cl_items,
     crate::rpc::AssetProof,
     sea_orm::{entity::*, query::*, DbErr, FromQueryResult},
-    spl_concurrent_merkle_tree::node::empty_node,
 };
+
+/// Compute the empty node hash at a given level of a concurrent merkle tree.
+/// Level 0 is all zeros; each subsequent level is the keccak hash of two copies
+/// of the previous level's empty node.
+fn empty_node(level: u32) -> [u8; 32] {
+    let mut data = [0u8; 32];
+    for _ in 0..level {
+        data = solana_sdk::keccak::hashv(&[&data, &data]).to_bytes();
+    }
+    data
+}
 
 #[derive(FromQueryResult, Debug, Default, Clone, Eq, PartialEq)]
 struct SimpleChangeLog {
@@ -33,10 +46,11 @@ struct Leaf {
     leaf_idx: i64,
 }
 
-pub async fn get_proof_for_asset(
+pub async fn get_asset_proof(
     db: &DatabaseConnection,
     asset_id: Vec<u8>,
 ) -> Result<AssetProof, DbErr> {
+    let last_indexed_slot = load_last_indexed_slot(db).await?;
     let sel = cl_items::Entity::find()
         .join_rev(
             JoinType::InnerJoin,
@@ -80,6 +94,7 @@ pub async fn get_proof_for_asset(
             .collect()
     })?;
     let asset_proof = build_asset_proof(
+        last_indexed_slot,
         leaf.tree,
         leaf.node_idx,
         leaf.hash,
@@ -93,6 +108,7 @@ pub async fn get_asset_proofs(
     db: &DatabaseConnection,
     asset_ids: Vec<Vec<u8>>,
 ) -> Result<HashMap<String, AssetProof>, DbErr> {
+    let last_indexed_slot = load_last_indexed_slot(db).await?;
     // get the leaves (JOIN with `asset` table to get the asset ids)
     let q = asset::Entity::find()
         .join(
@@ -102,6 +118,7 @@ pub async fn get_asset_proofs(
                 .to(cl_items::Column::LeafIdx)
                 .into(),
         )
+        // get only the necessary columns
         .select_only()
         .column(asset::Column::Id)
         .column(asset::Column::TreeId)
@@ -117,6 +134,12 @@ pub async fn get_asset_proofs(
             .map(|q| LeafInfo::from_query_result(q, "").unwrap())
             .collect()
     })?;
+
+    // No leaves found.
+    // Expected response is an empty map for this endpoint.
+    if leaves.is_empty() {
+        return Ok(HashMap::new());
+    }
 
     let mut asset_map: HashMap<Leaf, LeafInfo> = HashMap::new();
     for l in &leaves {
@@ -147,6 +170,14 @@ pub async fn get_asset_proofs(
             .add(cl_items::Column::NodeIdx.is_in(req_indexes.clone()));
         condition = condition.add(cond);
     }
+
+    // Safety check. This should never happen because the leaves should never be empty by this point.
+    // Without any conditions, this query will do a full table scan which will crash the pods.
+    if condition.is_empty() {
+        error!("Unexpected state for GetAssetProofs / getAssetProofBatch. Cannot execute with zero conditions.");
+        return Err(DbErr::RecordNotFound("Unexpected error".to_string()));
+    }
+
     let query = cl_items::Entity::find()
         .select_only()
         .column(cl_items::Column::Tree)
@@ -182,6 +213,7 @@ pub async fn get_asset_proofs(
 
         let leaf_info = asset_map.get(leaf).unwrap();
         let asset_proof = build_asset_proof(
+            last_indexed_slot,
             leaf_info.tree_id.clone(),
             leaf_info.node_idx,
             leaf_info.hash.clone(),
@@ -197,11 +229,12 @@ pub async fn get_asset_proofs(
 }
 
 fn build_asset_proof(
+    last_indexed_slot: u64,
     tree_id: Vec<u8>,
     leaf_node_idx: i64,
     leaf_hash: Vec<u8>,
     req_indexes: &Vec<i64>,
-    required_nodes: &[SimpleChangeLog],
+    required_nodes: &Vec<SimpleChangeLog>,
 ) -> AssetProof {
     let mut final_node_list = vec![SimpleChangeLog::default(); req_indexes.len()];
     for node in required_nodes.iter() {
@@ -219,6 +252,7 @@ fn build_asset_proof(
         }
     }
     AssetProof {
+        last_indexed_slot,
         root: bs58::encode(final_node_list.pop().unwrap().hash).into_string(),
         leaf: bs58::encode(leaf_hash).into_string(),
         proof: final_node_list
@@ -252,5 +286,5 @@ pub fn get_required_nodes_for_proof(index: i64) -> Vec<i64> {
         idx >>= 1
     }
     indexes.push(1);
-    indexes
+    return indexes;
 }

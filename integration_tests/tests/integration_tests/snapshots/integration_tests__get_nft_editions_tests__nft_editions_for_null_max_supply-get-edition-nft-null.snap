@@ -1,0 +1,75 @@
+---
+source: integration_tests/tests/integration_tests/get_nft_editions_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "5dFNU4rmxQGowe4Qm7Bqf2od2kSTfKmqmH9VrF6TzfHR",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://arweave.net/3EynoIYCg5Lr7QyQQmSe1ZjG2HjjxqunmZ-WLFavANI",
+    "files": [],
+    "metadata": {
+      "name": "Wen Editions",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "9psHNg12zVStC4CHbXS6WTYtLyRhZKdKY9YgdRLHFeYN",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "9psHNg12zVStC4CHbXS6WTYtLyRhZKdKY9YgdRLHFeYN",
+      "share": 100,
+      "verified": true
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "9psHNg12zVStC4CHbXS6WTYtLyRhZKdKY9YgdRLHFeYN"
+  },
+  "supply": {
+    "print_max_supply": null,
+    "print_current_supply": 0,
+    "edition_nonce": 252
+  },
+  "mutable": true,
+  "burnt": false,
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "mint_authority": "7eLQg2tbNd1ZF4pRjcfovmRx1sVJ83dKi4bEdVVF4yJp",
+    "freeze_authority": "7eLQg2tbNd1ZF4pRjcfovmRx1sVJ83dKi4bEdVVF4yJp"
+  }
+}

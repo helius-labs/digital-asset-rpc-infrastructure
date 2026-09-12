@@ -1,56 +1,40 @@
-pub mod api;
-mod builder;
-mod config;
-mod error;
-mod validation;
-
-use std::time::Instant;
-use {
-    crate::api::DasApi,
-    crate::builder::RpcApiBuilder,
-    crate::config::load_config,
-    crate::config::Config,
-    crate::error::DasApiError,
-    cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient},
-    cadence_macros::set_global_default,
-    std::env,
-    std::net::SocketAddr,
-    std::net::UdpSocket,
-};
-
+use cadence_macros::statsd_time;
+use digital_asset_types::dapi::common::LEGACY_TOKEN_IMAGES;
+use http::header::{HeaderMap, HeaderValue};
 use hyper::Method;
-use log::debug;
-use tower_http::cors::{Any, CorsLayer};
-
 use jsonrpsee::server::{
     logger::{Logger, TransportProtocol},
     middleware::proxy_get_request::ProxyGetRequestLayer,
     ServerBuilder,
 };
+use log::debug;
+use std::time::Instant;
+use tower_default_headers::DefaultHeadersLayer;
+use tower_http::cors::{Any, CorsLayer};
+use {
+    das_api::api::DasApi,
+    das_api::builder::RpcApiBuilder,
+    das_api::config::load_config,
+    das_api::error::DasApiError,
+    das_api::metrics::{safe_metric, setup_metrics},
+    std::env,
+    std::net::SocketAddr,
+};
 
-use cadence_macros::{is_global_default_set, statsd_time};
+// Using jemallocator because default allocator holds onto
+// memory too easily. This causes OOM when large accounts (>100MB)
+// are processed. jemallocator frees up memory much more aggressively.
+// jemallocator used to be default but was removed because of stability issues in Windows and Mac OS.
+// Since we are running in Linux we should be okay
+// 1. https://lib.rs/crates/jemallocator
+// 2. https://github.com/rust-lang/rfcs/blob/master/text/1974-global-allocators.md#jemalloc
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
 
-pub fn safe_metric<F: Fn()>(f: F) {
-    if is_global_default_set() {
-        f()
-    }
-}
-
-fn setup_metrics(config: &Config) {
-    let uri = config.metrics_host.clone();
-    let port = config.metrics_port;
-    let env = config.env.clone().unwrap_or_else(|| "dev".to_string());
-    if uri.is_some() || port.is_some() {
-        let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-        socket.set_nonblocking(true).unwrap();
-        let host = (uri.unwrap(), port.unwrap());
-        let udp_sink = BufferedUdpMetricSink::from(host, socket).unwrap();
-        let queuing_sink = QueuingMetricSink::from(udp_sink);
-        let builder = StatsdClient::builder("das_api", queuing_sink);
-        let client = builder.with_tag("env", env).build();
-        set_global_default(client);
-    }
-}
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+static MEGABYTE: u32 = 1024 * 1024;
 
 #[derive(Clone)]
 struct MetricMiddleware;
@@ -121,18 +105,36 @@ async fn main() -> Result<(), DasApiError> {
             .unwrap_or_else(|| "info,sqlx::query=warn,jsonrpsee_server::server=warn".into()),
     );
     env_logger::init();
-    let config = load_config()?;
+    let config = load_config();
+    // Force initialization of LEGACY_TOKEN_IMAGES before starting the server to avoid having
+    // slow initial requests.
+    let _ = &*LEGACY_TOKEN_IMAGES;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server_port));
     let cors = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET])
         .allow_origin(Any)
         .allow_headers([hyper::header::CONTENT_TYPE]);
     setup_metrics(&config);
+
+    let mut default_headers = HeaderMap::new();
+    default_headers.insert(
+        "X-Region",
+        HeaderValue::from_str(config.region.as_deref().unwrap_or("unknown")).unwrap(),
+    );
+
     let middleware = tower::ServiceBuilder::new()
         .layer(cors)
-        .layer(ProxyGetRequestLayer::new("/health", "healthz")?);
+        .layer(DefaultHeadersLayer::new(default_headers))
+        .layer(ProxyGetRequestLayer::new("/health", "healthz")?)
+        .layer(ProxyGetRequestLayer::new("/liveness", "liveness")?)
+        .layer(ProxyGetRequestLayer::new("/readiness", "readiness")?);
 
     let server = ServerBuilder::default()
+        // Default is 10MB. We increase it to deal with inscriptions and edge cases.
+        .max_response_body_size(20 * MEGABYTE)
+        // Default is 100 which is too low — slow queries hold connections and
+        // cause 429s under normal load. 1024 matches the jsonrpsee WS default.
+        .max_connections(1024)
         .set_middleware(middleware)
         .set_logger(MetricMiddleware)
         .build(addr)

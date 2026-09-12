@@ -1,4 +1,24 @@
-## IMPORTANT: See Prerequisites below
+# Helius Digital Asset RPC Infrastructure
+
+## Disclaimer
+
+This is the Helius version of the DAS system. Please note that we have diverged from the original repository.
+Helius has been consistently upgrading, fixing, and changing the DAS system for our customers. **Use at your own risk**.
+
+### Branch Management
+
+All custom Helius work is done under the `helius` branch.
+Changes directly compatible with the Metaplex repository are merged into the `main` branch. We periodically backport general fixes and improvements into the original repository.
+
+### Contribution
+
+PRs are welcome! This is the quickest way to get your changes ingested into the Helius system. PR's should be made against the `helius` branch. Please include testing details.
+
+<br/>
+
+---
+
+<br/>
 
 ## Digital Asset RPC API Infrastructure
 
@@ -20,10 +40,10 @@ This spec is what providers of this api must implement against.
 Along with the above rust binaries, this repo also maintains examples and best practice settings for running the entire infrastructure.
 The example infrastructure is as follows.
 
-- A Solana No-Vote Validator - This validator is configured to only have secure access to the validator ledger and account data under consensus.
-- A Geyser Plugin (Plerkle) - The above validator is further configured to load this geyser plugin that sends Plerkle Serialized Messages over a messaging system.
-- A Redis Cluster (Stream Optimized) - The example messaging system is a light weight redis deployment that supports the streaming configuration.
-- A Kubernetes Cluster - The orchestration system for the API and Ingester processes. Probably overkill for a small installation, but it's a rock solid platform for critical software.
+-   A Solana No-Vote Validator - This validator is configured to only have secure access to the validator ledger and account data under consensus.
+-   A Geyser Plugin (Plerkle) - The above validator is further configured to load this geyser plugin that sends Plerkle Serialized Messages over a messaging system.
+-   A Redis Cluster (Stream Optimized) - The example messaging system is a light weight redis deployment that supports the streaming configuration.
+-   A Kubernetes Cluster - The orchestration system for the API and Ingester processes. Probably overkill for a small installation, but it's a rock solid platform for critical software.
 
 This repo houses Helm Charts, Docker files and Terraform files to assist in the deployment of the example infrastructure.
 
@@ -43,16 +63,14 @@ Then with a local `DATABASE_URL` var exported like this `export DATABASE_URL=pos
 
 If you need to install `sea-orm-cli` run `cargo install sea-orm-cli`.
 
-Note: The current SeaORM types were generated using version 0.9.3 so unless you want to upgrade you can install using `cargo install sea-orm-cli --version 0.9.3`.
-
 #### Developing Locally
 
 _Prerequisites_
 
-- A Postgres Server running with the database setup according to ./init.sql
-- A Redis instance that has streams enabled or a version that supports streams
-- A local solana validator with the Plerkle plugin running.
-- Environment Variables set to allow your validator, ingester and api to access those prerequisites.
+-   A Postgres Server running with the database setup according to ./init.sql
+-   A Redis instance that has streams enabled or a version that supports streams
+-   A local solana validator with the Plerkle plugin running.
+-   Environment Variables set to allow your validator, ingester and api to access those prerequisites.
 
 See [Plugin Configuration](https://github.com/metaplex-foundation/digital-asset-validator-plugin#building-locally) for how to locally configure the test validator plugin to work.
 
@@ -72,7 +90,7 @@ For the Ingester you need the following environment variables:
 ```bash
 INGESTER_DATABASE_CONFIG: '{listener_channel="backfill_item_added", url="postgres://solana:solana@db/solana"}' # your database host
 INGESTER_MESSENGER_CONFIG: '{messenger_type="Redis", connection_config={ redis_connection_str="redis://redis" } }' #your redis
-INGESTER_RPC_CONFIG: '{url="http://validator:8899", commitment="finalized"}' # your solana validator or same network rpc, if local you must use your solana instance running localy
+INGESTER_RPC_CONFIG: '{url="http://validator:8899", commitment="confirmed"}' # your solana validator or same network rpc, if local you must use your solana instance running localy
 ```
 
 ```bash
@@ -94,25 +112,26 @@ Ingester for just the Listeners to txn and acct
 Backfiller for just the backfiller scheduler and notifyer
 Background for just the background tasks.
 
-For production you should split the coponents up.
+For production you should split the components up.
 
 ### Developing With Docker
 
 Developing with Docker is much easier, but has some nuances to it. This test docker compose system relies on a programs folder being accessible, this folder needs to have the shared object files for the following programs
 
-- Token Metadata
-- Bubblegum
-- Gummyroll
-- Token 2022
-- Latest version of the Associated token program
+-   Token Metadata
+-   Bubblegum
+-   Gummyroll
+-   Token 2022
+-   Latest version of the Associated token program
 
-You need to run the following script in order to get the .so files.
+You need to run the following script (which takes a long time) in order to get all those .so files.
 
 ```bash
+chmod +x ./prepare-local-docker-env.sh
 ./prepare-local-docker-env.sh
 ```
 
-This script grabs all the code for these programs and compiles it, and chucks it into your programs folder. Go grab some coffe because this will take a while/
+This script grabs all the code for these programs and compiles it, and chucks it into your programs folder. Go grab some coffee because this will take a while/
 If you get some permissions errors, just sudo delete the programs directory and start again.
 
 #### Authentication with Docker and AWS
@@ -140,54 +159,6 @@ When making changes you will need to `docker compose up --build --force-recreate
 Also when mucking about with the docker file if your gut tells you that something is wrong, and you are getting build errors run `docker compose build --no-cache`
 
 Sometimes you will want to delete the db do so with `sudo rm -rf db-data`. You can also delete the ledger with `sudo rm -rf ledger`.
-
-#### Running Bubblegum Test Sequences
-
-While running the multi-container Docker application locally, you can run a script located in `tools/txn_forwarder/bubblegum_tests` that will send sequences of bubblegum transactions via the `txn_forwarder`, and then use `psql` to read and verify the indexing results in the local Postgres database.
-
-```bash
-sudo rm -rf db-data/
-sudo rm -rf ledger/
-docker compose up --force-recreate --build
-```
-
-_In another terminal:_
-
-```bash
-cd tools/txn_forwarder/bubblegum_tests/
-./run-bubblegum-sequences.sh
-```
-
-You should see it log something like:
-
-```
-Running 10 scenarios forwards
-mint_transfer_burn.scenario initial asset table state passed
-mint_transfer_burn.scenario initial asset_creators table state passed
-mint_transfer_burn.scenario initial asset_grouping table state passed
-mint_transfer_burn.scenario initial cl_items table state passed
-...
-mint_to_collection_unverify_collection.scenario asset table passed
-mint_to_collection_unverify_collection.scenario asset_creators table passed
-mint_to_collection_unverify_collection.scenario asset_grouping table passed
-mint_to_collection_unverify_collection.scenario cl_items table passed
-
-ALL TESTS PASSED FORWARDS!
-```
-
-You can also run the sequences in reverse:
-
-```bash
-./run-bubblegum-sequences.sh reverse
-```
-
-And after it runs you should see `ALL TESTS PASSED IN REVERSE!`
-
-A few detailed notes about this test script:
-
-- This script is not all-encompassing. It is only meant to automate some normal basic tests that were previously done manually. The reason this test is not added to CI is because requires a more powerful system to run the Docker application, which contains the no-vote Solana validator.
-- The test sequences are in `.scenario` files, but instead of sending those files to the `txn_forwarder` directly (which supports the file format), we parse them out and send them individually using the `single` parameter. This is because using the `.scenario` file directly results in random ordering of the transactions and we are explicity trying to test them going forwards and in reverse.
-- In general the expected database results are the same when running the transactions forwards and backwards. However, for assets that are decompressed, this is not true because we don't index some of the asset information from Bubblegum mint indexing if we already know the asset has been decompressed. We instead let Token Metadata account based indexing fill in that information. This is not reflected by this test script so the results differ when running these sequences in reverse. The differing results are reflected in test files with the `_reverse` suffix.
 
 #### Logs
 
@@ -224,40 +195,25 @@ And a Metrics System on
 http://localhost:3000
 ```
 
-Here are some example requests to the Read API:
+Here is an example request to the API
 
 ```bash
-curl --request POST --url http://localhost:9090 --header 'Content-Type: application/json' --data '{
-    "jsonrpc": "2.0",
-    "method": "getAssetsByOwner",
-    "params": [
-      "CMvMqPNKHikuGi7mrngvQzFeQ4rndDnopx3kc9drne8M",
-      { "sortBy": "created", "sortDirection": "asc"},
-      50,
-      1,
-      "",
-      ""
-    ],
-    "id": 0
-}' | json_pp
-
-curl --request POST --url http://localhost:9090 --header 'Content-Type: application/json' --data '{
-    "jsonrpc": "2.0",
-    "method": "getAsset",
-    "params": [
-      "8vw7tdLGE3FBjaetsJrZAarwsbc8UESsegiLyvWXxs5A"
-    ],
-    "id": 0
-}' | json_p
-
-curl --request POST --url http://localhost:9090 --header 'Content-Type: application/json' --data '{
-    "jsonrpc": "2.0",
-    "method": "getAssetProof",
-    "params": [
-      "8vw7tdLGE3FBjaetsJrZAarwsbc8UESsegiLyvWXxs5A"
-    ],
-    "id": 0
-}' | json_pp
+curl --request POST \
+  --url http://localhost:9090 \
+  --header 'Content-Type: application/json' \
+  --data '{
+	"jsonrpc": "2.0",
+"method":"get_assets_by_owner",
+	"id": "rpd-op-123",
+	"params": [
+    "CMvMqPNKHikuGi7mrngvQzFeQ4rndDnopx3kc9drne8M",
+    "created",
+    50,
+    1,
+    "",
+    ""
+  ]
+}'
 ```
 
 # Deploying to Kubernetes
@@ -329,6 +285,7 @@ time ingester.bgtask.proc_time
 count ingester.bgtask.success
 count ingester.bgtask.error
 count ingester.bgtask.network_error
+count ingester.bgtask.unrecoverable_error
 time ingester.bgtask.bus_time
 count ingester.bgtask.identical
 

@@ -1,3 +1,4 @@
+use enum_iterator::Sequence;
 use sea_orm_migration::prelude::*;
 
 #[derive(Copy, Clone, Iden)]
@@ -6,7 +7,6 @@ pub enum AssetCreators {
     Id,
     AssetId,
     Creator,
-    Position,
     Share,
     Verified,
     Seq,
@@ -26,7 +26,6 @@ pub enum AssetAuthority {
 pub enum AssetGrouping {
     Table,
     Id,
-    AssetId,
     GroupKey,
     GroupValue,
     Seq,
@@ -73,7 +72,6 @@ pub enum Asset {
     AssetData,
     CreatedAt,
     Burnt,
-    SlotUpdated,
     SlotUpdatedMetadataAccount,
     SlotUpdatedMintAccount,
     SlotUpdatedTokenAccount,
@@ -83,23 +81,64 @@ pub enum Asset {
     OwnerDelegateSeq,
     WasDecompressed,
     LeafSeq,
+    CreatorsInfo,
+    CollectionsInfo,
+    AuthorititiesInfo,
+    MintExtensions,
+    TokenExtensions,
+    MetadataAccountId,
     BaseInfoSeq,
+    MplCorePlugins,
+    MplCoreUnknownPlugins,
+    MplCoreCollectionNumMinted,
+    MplCoreCollectionCurrentSize,
+    MplCorePluginsJsonVersion,
+    MplCoreExternalPlugins,
+    MplCoreUnknownExternalPlugins,
+    CollectionHash,
+    AssetDataHash,
+    BubblegumFlags,
+    NonTransferable,
+    IsAgent,
+    AgentToken,
+    AssetSigner,
+    SlotUpdatedAgentRegistry,
 }
 
 #[derive(Copy, Clone, Iden)]
 pub enum AssetData {
     Table,
     Id,
-    ChainDataMutability,
     ChainData,
-    MetadataUrl,
-    MetadataMutability,
-    Metadata,
-    SlotUpdated,
-    Reindex,
+    ChainDataMutability,
     RawName,
     RawSymbol,
+    SlotUpdated,
+}
+
+#[derive(Copy, Clone, Iden)]
+pub enum AssetDataV2 {
+    Table,
+    Id,
+    MetadataUrl,
+    ChainData,
+    ChainDataMutability,
+    RawName,
+    RawSymbol,
+    SlotUpdated,
     BaseInfoSeq,
+}
+
+#[derive(Copy, Clone, Iden)]
+pub enum OffchainMetadata {
+    Table,
+    Id,
+    MetadataUrl,
+    Mutability,
+    Metadata,
+    CreatedAt,
+    UpdatedAt,
+    Reindex,
 }
 
 #[derive(Copy, Clone, Iden)]
@@ -142,7 +181,9 @@ pub enum Tokens {
     MintAuthority,
     FreezeAuthority,
     CloseAuthority,
+    ExtensionData,
     SlotUpdated,
+    Extensions,
 }
 
 #[derive(Copy, Clone, Iden)]
@@ -169,4 +210,48 @@ pub enum ClAuditsV2 {
     CreatedAt,
     Tx,
     Instruction,
+}
+
+#[derive(Copy, Clone, Iden)]
+pub enum Owners {
+    Table,
+    Id,
+    Owner,
+    Mint,
+    TokenAccount,
+    Delegate,
+    SlotUpdated,
+    OwnerDelegateSeq,
+    CreatedAt,
+}
+
+#[derive(Iden, Debug, PartialEq, Sequence)]
+pub enum EditionAccountType {
+    Edition,
+    EditionMarker,
+    MasterEditionV1,
+    MasterEditionV2,
+    Unknown,
+}
+
+#[derive(Iden)]
+pub enum Editions {
+    EditionAccountType,
+    Table,
+    Id,
+    Parent,
+    EditionType,
+    Data,
+    SlotUpdated,
+}
+
+#[derive(Copy, Clone, Iden)]
+pub enum Blocks {
+    Table,
+    Slot,
+    ParentSlot,
+    Blockhash,
+    ParentBlockhash,
+    BlockHeight,
+    BlockTime,
 }

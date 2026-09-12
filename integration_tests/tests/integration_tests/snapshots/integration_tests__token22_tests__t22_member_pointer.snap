@@ -1,0 +1,59 @@
+---
+source: integration_tests/tests/integration_tests/token22_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "Custom",
+  "id": "A1Ypyq4BHkS1R1DnYiRV9HxC4joWDNgFcmaCpMgJjppK",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "",
+    "files": [],
+    "metadata": {},
+    "links": {}
+  },
+  "authorities": [],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "token",
+    "owner": ""
+  },
+  "supply": null,
+  "mutable": true,
+  "burnt": false,
+  "mint_extensions": {
+    "group_member_pointer": {
+      "authority": "B9fcrRtNZK1j29sfPhrdrcbNwkrNcEGWNu7XFApt56ww",
+      "member_address": "A1Ypyq4BHkS1R1DnYiRV9HxC4joWDNgFcmaCpMgJjppK"
+    }
+  },
+  "token_info": {
+    "supply": 0,
+    "decimals": 9,
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "mint_authority": "B9fcrRtNZK1j29sfPhrdrcbNwkrNcEGWNu7XFApt56ww"
+  }
+}

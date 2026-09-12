@@ -1,0 +1,66 @@
+---
+source: integration_tests/tests/integration_tests/cnft_tests_v2_leaf_schema.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "MplBubblegumV2",
+  "id": "H98ZTBg5XdWRxt35XDznbX2Z1m7nCYeYqoBTdi5qAQBg",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://example.com/my-nft.json",
+    "files": [],
+    "metadata": {
+      "name": "My NFT",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "5jp9HZKLLLkgvmfSZBLPi4G4mHffQh8wWo4ekt5oATDN",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": true,
+    "data_hash": "EHnEc36MD4gW2VvnJZ8LCDovJFRamyWSgfAh9EckHSdP",
+    "creator_hash": "EKDHSGbrGztomDfuiV4iqiZ6LschDJPsFiXjZ83f92Md",
+    "collection_hash": "3mG2ogUZaUxX7TKRbDNDUPnesYghsd87YFAduqs4TETk",
+    "asset_data_hash": "EKDHSGbrGztomDfuiV4iqiZ6LschDJPsFiXjZ83f92Md",
+    "flags": 0,
+    "asset_hash": "FNaV4jwpi2sFukJJ4EPv874Tc7HF4yLTcaCaweBkheFh",
+    "tree": "82acvgy5FSxnnS4jpRWhrB3AiSqtYrKtKrqiVfoNf47N",
+    "seq": 2,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.05,
+    "basis_points": 500,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": false,
+    "non_transferable": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "28fnW7CpgsyPBqgCU9GLesnLoanqTfUjeAr2gZy4zsm1"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false
+}

@@ -1,0 +1,152 @@
+---
+source: integration_tests/tests/integration_tests/edition_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 2,
+  "limit": 1000,
+  "cursor": "ECLVgNATXMi7JTz5fxZQSrVWXomBcUMqaVZJinbkANmW",
+  "items": [
+    {
+      "interface": "V1_NFT",
+      "id": "Ey2Qb8kLctbchQsMnhZs5DjY32To2QtPuXNwWvk4NosL",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://arweave.net/qtd2UfdKkcmsg-JEGnL_ZJNrOsS0oc2rt_rRUzVuMEk",
+        "files": [],
+        "metadata": {
+          "name": "Silurian Period",
+          "symbol": "",
+          "token_standard": "NonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.1,
+        "basis_points": 1000,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "232PpcrPc6Kz7geafvbRzt5HnHP4kX88yvzUCN69WXQC",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "DN5aWeXu4Tx4uBUG3zvqpmcRG7jaYgeH87SnViLiRd7v"
+      },
+      "supply": {
+        "print_max_supply": 69,
+        "print_current_supply": 67,
+        "edition_nonce": 254
+      },
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "token_accounts": [
+          {
+            "address": "H1qwDA6DPrQ4fzmBRMs3s4HD9XLSFKaxJz2Ka2R5CY3T",
+            "balance": 1
+          }
+        ],
+        "balance": 1,
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "H1qwDA6DPrQ4fzmBRMs3s4HD9XLSFKaxJz2Ka2R5CY3T",
+        "mint_authority": "8SHfqzJYABeGfiG1apwiEYt6TvfGQiL1pdwEjvTKsyiZ",
+        "freeze_authority": "8SHfqzJYABeGfiG1apwiEYt6TvfGQiL1pdwEjvTKsyiZ"
+      }
+    },
+    {
+      "interface": "V1_NFT",
+      "id": "ECLVgNATXMi7JTz5fxZQSrVWXomBcUMqaVZJinbkANmW",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://nftstorage.link/ipfs/bafkreifzivkxlqcrlvnvplpa2s7w2lwrloudmvrir4xmahaowolyvcqzsu",
+        "files": [],
+        "metadata": {
+          "name": "2400JUP Lucky Box JUPCASE.io",
+          "symbol": "SA",
+          "token_standard": "NonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "3EtMqMMmdYZeQjot8BT9Udze6kN6Yb9XnsDP8Zvhvpny",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": true,
+        "data_hash": "DQFN3j6PhpSnjRs7F6Kvd8CoL7juKeEaZB81PuxQXReM",
+        "creator_hash": "EKDHSGbrGztomDfuiV4iqiZ6LschDJPsFiXjZ83f92Md",
+        "asset_hash": "EvNkDSJWuQGa7DB6bJkDgpfS6vuheHibCK6cTKVmewBN",
+        "tree": "42S9nPnxR3DgNkNjeV8MCbfvz5hksubiydDW3pbWQAZU",
+        "seq": 3976726,
+        "leaf_id": 3976517
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "ASHNoZ58Kqe46N4XDjVUEBDSLXVtcz292r4ZuZBt6rF1"
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": true,
+        "locked": false
+      },
+      "creators": [],
+      "ownership": {
+        "frozen": false,
+        "delegated": true,
+        "delegate": "2xGDh3giFeTsAv7KrpKVrUbpK8qJGVe3xebQPMqFa4MU",
+        "ownership_model": "single",
+        "owner": "DN5aWeXu4Tx4uBUG3zvqpmcRG7jaYgeH87SnViLiRd7v"
+      },
+      "supply": {
+        "print_max_supply": 0,
+        "print_current_supply": 0,
+        "edition_nonce": 0
+      },
+      "mutable": false,
+      "burnt": false
+    }
+  ]
+}

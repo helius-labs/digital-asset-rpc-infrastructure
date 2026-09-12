@@ -1,0 +1,73 @@
+---
+source: integration_tests/tests/integration_tests/cnft_tests.rs
+expression: response
+---
+{
+  "interface": "V1_NFT",
+  "id": "GiWS83WQ1yZgADha4TArE4m7ivvzioarofqkbSAeuaGm",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://wagmi-collectibles.s3.amazonaws.com/drops/trait_packs/crack-pack-005/blue-meta.json",
+    "files": [],
+    "metadata": {
+      "name": "Blue Ticket Card",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "AyW32YPRoy7YvsfJmotMiEv3qMQyqvTJLgpfdiWG8vyd",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": true,
+    "data_hash": "HEMFXg52B96FNUYyV3vTcvoHri72RZ49NgTAypJzr9fq",
+    "creator_hash": "Cywn23kJuJw97uprir7HBhQD2TfpP6CKhPGH1RGAUCHK",
+    "asset_hash": "59FEAkU3xvJApocdBiTB8DY6hzZU4FzN1m9DW1o9VfJE",
+    "tree": "hAsrSYBkzdaz4r3EJ6pwxNL1YbGbM5c1jNuhLV6Uzqi",
+    "seq": 395210,
+    "leaf_id": 296138
+  },
+  "grouping": [
+    {
+      "group_key": "collection",
+      "group_value": "HBBeDCudoonMP556rARZ8nqrUH4QYUeVAvxkpPsiWUwp",
+      "verified": true
+    }
+  ],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.5,
+    "basis_points": 5000,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "GYXaUgjPMYCyBxNo8p1U6abFFkteczjMw7iyuGEr3JnJ",
+      "share": 100,
+      "verified": false
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "GbjgxHrHeHjRzCd6Y9SQkacZJes4GCCWYJB1LQtgQb4H"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false
+}

@@ -1,0 +1,9 @@
+**/target
+*/target
+target
+db-data
+node-modules
+ledger
+.anchor
+docker/geyser-outputs
+docker/solana-outputs

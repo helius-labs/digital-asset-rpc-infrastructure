@@ -5,7 +5,10 @@ use cadence_macros::{is_global_default_set, set_global_default, statsd_count, st
 use log::{error, warn};
 use tokio::time::Instant;
 
-use crate::{config::IngesterConfig, error::IngesterError};
+use crate::{
+    config::{IngesterConfig, CODE_VERSION},
+    error::IngesterError,
+};
 
 #[macro_export]
 macro_rules! metric {
@@ -29,16 +32,17 @@ pub fn setup_metrics(config: &IngesterConfig) {
         let udp_sink = BufferedUdpMetricSink::from(host, socket).unwrap();
         let queuing_sink = QueuingMetricSink::from(udp_sink);
         let builder = StatsdClient::builder("das_ingester", queuing_sink);
-        let client = builder.with_tag("env", env).build();
+        let client = builder
+            .with_tag("env", env)
+            .with_tag("version", CODE_VERSION)
+            .build();
         set_global_default(client);
     }
 }
 
 // Returns a boolean indicating whether the redis message should be ACK'd.
 // If the message is not ACK'd, it will be retried as long as it is under the retry limit.
-#[allow(clippy::too_many_arguments)]
 pub fn capture_result(
-    _id: String,
     stream: &str,
     label: (&str, &str),
     tries: usize,
@@ -47,77 +51,82 @@ pub fn capture_result(
     txn_sig: Option<&str>,
     account: Option<String>,
 ) -> bool {
+    #[allow(unused_assignments)]
+    let mut should_ack = false;
+    let mut dropped_message = false;
     match res {
         Ok(_) => {
             metric! {
-                statsd_time!("ingester.proc_time", proc.elapsed().as_millis() as u64, label.0 => label.1, "stream" => stream);
+                statsd_time!("ingester.proc_time", proc.elapsed().as_millis() as u64, label.0 => &label.1, "stream" => stream);
             }
             if tries == 0 {
                 metric! {
-                    statsd_count!("ingester.ingest_success", 1, label.0 => label.1, "stream" => stream);
+                    statsd_count!("ingester.ingest_success", 1, label.0 => &label.1, "stream" => stream);
                 }
             } else {
                 metric! {
-                    statsd_count!("ingester.redeliver_success", 1, label.0 => label.1, "stream" => stream);
+                    statsd_count!("ingester.redeliver_success", 1, label.0 => &label.1, "stream" => stream);
                 }
             }
-            true
+            should_ack = true;
         }
-        Err(IngesterError::NotImplemented) => {
+        Err(err) if err == IngesterError::NotImplemented => {
             metric! {
-                statsd_count!("ingester.not_implemented", 1, label.0 => label.1, "stream" => stream, "error" => "ni");
+                statsd_count!("ingester.not_implemented", 1, label.0 => &label.1, "stream" => stream, "error" => "ni");
             }
-            true
+            should_ack = true;
         }
         Err(IngesterError::DeserializationError(e)) => {
             metric! {
-                statsd_count!("ingester.ingest_error", 1, label.0 => label.1, "stream" => stream, "error" => "de");
+                statsd_count!("ingester.ingest_error", 1, label.0 => &label.1, "stream" => stream, "error" => "de");
             }
             if let Some(sig) = txn_sig {
-                warn!("Error deserializing txn {}: {:?}", sig, e);
+                error!("Error deserializing txn {}: {:?}", sig, e);
             } else if let Some(account) = account {
                 warn!("Error deserializing account {}: {:?}", account, e);
             } else {
-                warn!("{}", e);
+                error!("{}", e);
             }
             // Non-retryable error.
-            true
+            should_ack = true;
+            dropped_message = true;
         }
         Err(IngesterError::ParsingError(e)) => {
             metric! {
-                statsd_count!("ingester.ingest_error", 1, label.0 => label.1, "stream" => stream, "error" => "parse");
+                statsd_count!("ingester.ingest_error", 1, label.0 => &label.1, "stream" => stream, "error" => "parse");
             }
             if let Some(sig) = txn_sig {
-                warn!("Error parsing txn {}: {:?}", sig, e);
+                error!("Error parsing txn {}: {:?}", sig, e);
             } else if let Some(account) = account {
                 warn!("Error parsing account {}: {:?}", account, e);
             } else {
-                warn!("{}", e);
+                error!("{}", e);
             }
             // Non-retryable error.
-            true
+            should_ack = true;
+            dropped_message = true;
         }
         Err(IngesterError::DatabaseError(e)) => {
             metric! {
-                statsd_count!("ingester.database_error", 1, label.0 => label.1, "stream" => stream, "error" => "db");
+                statsd_count!("ingester.database_error", 1, label.0 => &label.1, "stream" => stream, "error" => "db");
             }
             if let Some(sig) = txn_sig {
                 warn!("Error database txn {}: {:?}", sig, e);
             } else {
                 warn!("{}", e);
             }
-            false
+            should_ack = false;
         }
         Err(IngesterError::AssetIndexError(e)) => {
             metric! {
-                statsd_count!("ingester.index_error", 1, label.0 => label.1, "stream" => stream, "error" => "index");
+                statsd_count!("ingester.index_error", 1, label.0 => &label.1, "stream" => stream, "error" => "index");
             }
             if let Some(sig) = txn_sig {
                 warn!("Error indexing transaction {}: {:?}", sig, e);
             } else {
                 warn!("Error indexing account: {:?}", e);
             }
-            false
+            should_ack = false;
         }
         Err(err) => {
             if let Some(sig) = txn_sig {
@@ -128,9 +137,16 @@ pub fn capture_result(
                 error!("Error handling update: {:?}", err);
             }
             metric! {
-                statsd_count!("ingester.ingest_update_error", 1, label.0 => label.1, "stream" => stream, "error" => "u");
+                statsd_count!("ingester.ingest_update_error", 1, label.0 => &label.1, "stream" => stream, "error" => "u");
             }
-            false
+            should_ack = false;
         }
     }
+    // Triggers Helius alarm.
+    if dropped_message {
+        metric! {
+            statsd_count!("ingester.dropped_message", 1, "stream" => stream);
+        }
+    }
+    should_ack
 }

@@ -1,6 +1,7 @@
-use crate::{error::IngesterError, tasks::TaskData};
+use crate::{config::IngesterConfig, error::IngesterError, metric, tasks::TaskData};
 use blockbuster::programs::token_account::TokenProgramAccount;
-use digital_asset_types::dao::{asset, sea_orm_active_enums::OwnerType, token_accounts, tokens};
+use cadence_macros::{is_global_default_set, statsd_count};
+use digital_asset_types::dao::{asset, owners, sea_orm_active_enums::OwnerType, tokens};
 use plerkle_serialization::AccountInfo;
 use sea_orm::{
     entity::*, query::*, sea_query::OnConflict, ActiveValue::Set, ConnectionTrait,
@@ -15,11 +16,74 @@ use super::asset_upserts::{
     AssetMintAccountColumns, AssetTokenAccountColumns,
 };
 
+pub async fn upsert_owner_for_account<T>(
+    txn_or_conn: &T,
+    id: Vec<u8>,
+    token_account: Option<Vec<u8>>,
+    owner: Vec<u8>,
+    delegate: Option<Vec<u8>>,
+    slot: i64,
+    frozen: bool,
+    extensions: Option<serde_json::Value>,
+    amount: u64,
+    delegate_amount: i64,
+    token_program: Vec<u8>,
+) -> Result<(), IngesterError>
+where
+    T: ConnectionTrait + TransactionTrait,
+{
+    let owners_model = owners::ActiveModel {
+        mint: Set(Some(id)),
+        token_account: Set(token_account),
+        owner: Set(Some(owner)),
+        delegate: Set(delegate),
+        slot_updated: Set(Some(slot)),
+        frozen: Set(frozen),
+        token_extensions: Set(extensions),
+        token_amount: Set(Some(amount as i64)),
+        token_amount_u64: Set(Some(amount.into())),
+        delegated_amount: Set(Some(delegate_amount)),
+        token_program: Set(Some(token_program)),
+        closed: Set(Some(false)),
+        ..Default::default()
+    };
+    let mut query = owners::Entity::insert(owners_model)
+        .on_conflict(
+            OnConflict::columns([owners::Column::TokenAccount])
+                .update_columns([
+                    owners::Column::Owner,
+                    owners::Column::Mint,
+                    owners::Column::Delegate,
+                    owners::Column::SlotUpdated,
+                    owners::Column::Frozen,
+                    owners::Column::TokenExtensions,
+                    owners::Column::TokenAmount,
+                    owners::Column::TokenAmountU64,
+                    owners::Column::DelegatedAmount,
+                    owners::Column::TokenProgram,
+                    owners::Column::Closed,
+                ])
+                .to_owned(),
+        )
+        .build(DbBackend::Postgres);
+
+    query.sql = format!(
+        "{} WHERE excluded.slot_updated >= owners.slot_updated OR owners.slot_updated IS NULL",
+        query.sql
+    );
+    txn_or_conn
+        .execute(query)
+        .await
+        .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+    Ok(())
+}
+
 pub async fn handle_token_program_account<'a, 'b, 'c>(
     account_update: &'a AccountInfo<'a>,
     parsing_result: &'b TokenProgramAccount,
     db: &'c DatabaseConnection,
     _task_manager: &UnboundedSender<TaskData>,
+    _config: &IngesterConfig,
 ) -> Result<(), IngesterError> {
     let key = *account_update.pubkey().unwrap();
     let key_bytes = key.0.to_vec();
@@ -31,67 +95,108 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 COption::Some(d) => Some(d.to_bytes().to_vec()),
                 COption::None => None,
             };
-            let frozen = matches!(ta.state, AccountState::Frozen);
-            let owner = ta.owner.to_bytes().to_vec();
-            let model = token_accounts::ActiveModel {
-                pubkey: Set(key_bytes),
-                mint: Set(mint.clone()),
-                delegate: Set(delegate.clone()),
-                owner: Set(owner.clone()),
-                frozen: Set(frozen),
-                delegated_amount: Set(ta.delegated_amount as i64),
-                token_program: Set(spl_token_program),
-                slot_updated: Set(account_update.slot() as i64),
-                amount: Set(ta.amount as i64),
-                close_authority: Set(None),
+            let frozen = match ta.state {
+                AccountState::Frozen => true,
+                _ => false,
             };
+            let owner = ta.owner.to_bytes().to_vec();
 
-            let mut query = token_accounts::Entity::insert(model)
-                .on_conflict(
-                    OnConflict::columns([token_accounts::Column::Pubkey])
-                        .update_columns([
-                            token_accounts::Column::Mint,
-                            token_accounts::Column::DelegatedAmount,
-                            token_accounts::Column::Delegate,
-                            token_accounts::Column::Amount,
-                            token_accounts::Column::Frozen,
-                            token_accounts::Column::TokenProgram,
-                            token_accounts::Column::Owner,
-                            token_accounts::Column::CloseAuthority,
-                            token_accounts::Column::SlotUpdated,
-                        ])
-                        .to_owned(),
-                )
-                .build(DbBackend::Postgres);
-            query.sql = format!(
-                "{} WHERE excluded.slot_updated > token_accounts.slot_updated",
-                query.sql
-            );
-            db.execute(query).await?;
+            upsert_owner_for_account(
+                db,
+                mint.clone(),
+                Some(key_bytes),
+                owner.clone(),
+                delegate.clone(),
+                account_update.slot() as i64,
+                frozen,
+                None,
+                ta.amount,
+                ta.delegated_amount as i64,
+                spl_token_program,
+            )
+            .await?;
+
+            // Metrics
+            let mut token_owner_update = false;
+            let mut token_delegate_update = false;
+            let mut token_freeze_update = false;
+
             let txn = db.begin().await?;
-            let asset_update: Option<asset::Model> = asset::Entity::find_by_id(mint.clone())
-                .filter(asset::Column::OwnerType.eq("single"))
+            let asset_update = asset::Entity::find_by_id(mint.clone())
+                .filter(asset::Column::OwnerType.eq("single").and(
+                    asset::Column::SlotUpdatedTokenAccount.is_null().or(
+                        asset::Column::SlotUpdatedTokenAccount.lte(account_update.slot() as i64),
+                    ),
+                ))
                 .one(&txn)
                 .await?;
-            if let Some(_asset) = asset_update {
-                // will only update owner if token account balance is non-zero
-                // since the asset is marked as single then the token account balance can only be 1. Greater implies a fungible token in which case no si
-                // TODO: this does not guarantee in case when wallet receives an amount of 1 for a token but its supply is more. is unlikely since mints often have a decimal
-                if ta.amount == 1 {
-                    upsert_assets_token_account_columns(
-                        AssetTokenAccountColumns {
-                            mint: mint.clone(),
-                            owner: Some(owner.clone()),
-                            frozen,
-                            delegate,
-                            slot_updated_token_account: Some(account_update.slot() as i64),
-                        },
-                        &txn,
-                    )
-                    .await?;
+
+            if let Some(asset) = asset_update {
+                // Only handle token account updates for NFTs (supply=1)
+                // TODO: Support fungible tokens
+                let asset_clone = asset.clone();
+                if asset_clone.supply == 1 {
+                    let mut save_required = false;
+                    let mut active: asset::ActiveModel = asset.into();
+
+                    // Handle ownership updates
+                    let old_owner = asset_clone.owner.clone();
+                    let new_owner = owner.clone();
+                    if ta.amount > 0 && Some(new_owner) != old_owner {
+                        active.owner = Set(Some(owner.clone()));
+                        token_owner_update = true;
+                        save_required = true;
+                    }
+
+                    // Handle delegate updates
+                    if ta.amount > 0 && delegate.clone() != asset_clone.delegate {
+                        active.delegate = Set(delegate.clone());
+                        token_delegate_update = true;
+                        save_required = true;
+                    }
+
+                    // Handle freeze updates
+                    if ta.amount > 0 && frozen != asset_clone.frozen {
+                        active.frozen = Set(frozen);
+                        token_freeze_update = true;
+                        save_required = true;
+                    }
+
+                    if save_required {
+                        upsert_assets_token_account_columns(
+                            AssetTokenAccountColumns {
+                                mint,
+                                owner: Some(owner),
+                                frozen,
+                                delegate,
+                                token_extensions: None,
+                                slot_updated_token_account: Some(account_update.slot() as i64),
+                            },
+                            &txn,
+                        )
+                        .await?;
+                    }
                 }
             }
             txn.commit().await?;
+
+            // Publish metrics outside of the txn to reduce txn latency.
+            if token_owner_update {
+                metric! {
+                    statsd_count!("token_account.owner_update", 1);
+                }
+            }
+            if token_delegate_update {
+                metric! {
+                    statsd_count!("token_account.delegate_update", 1);
+                }
+            }
+            if token_freeze_update {
+                metric! {
+                    statsd_count!("token_account.freeze_update", 1);
+                }
+            }
+
             Ok(())
         }
         TokenProgramAccount::Mint(m) => {
@@ -113,6 +218,7 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 extension_data: Set(None),
                 mint_authority: Set(mint_auth),
                 freeze_authority: Set(freeze_auth),
+                extensions: Set(None),
             };
 
             let mut query = tokens::Entity::insert(model)
@@ -147,12 +253,13 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 )
                 .one(db)
                 .await?;
-            if let Some(_asset) = asset_update {
+
+            if asset_update.is_some() {
                 upsert_assets_mint_account_columns(
                     AssetMintAccountColumns {
                         mint: key_bytes.clone(),
-                        suppply_mint: Some(key_bytes),
-                        supply: m.supply,
+                        supply_mint: Some(key_bytes.clone()),
+                        supply: m.supply as u64,
                         slot_updated_mint_account: account_update.slot(),
                     },
                     db,

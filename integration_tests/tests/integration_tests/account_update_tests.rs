@@ -1,8 +1,11 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use digital_asset_types::rpc::options::Options;
 use function_name::named;
 
 use das_api::api::{self, ApiContract};
 
+use itertools::Itertools;
+use mpl_core::accounts::BaseAssetV1;
 use plerkle_serialization::{
     root_as_account_info, serializer::serialize_account,
     solana_geyser_plugin_interface_shims::ReplicaAccountInfoV2,
@@ -34,11 +37,17 @@ struct MetadataAccountUpdate {
 }
 
 #[derive(Debug, Clone)]
+struct MetaplexCoreUpdate {
+    owner: Pubkey,
+}
+
+#[derive(Debug, Clone)]
 enum AccountUpdate {
     TokenAccount(TokenAccountUpdate),
     #[allow(dead_code)]
     MintAccount(MintAccountUpdate),
     MetadataAccount(MetadataAccountUpdate),
+    MetaplexCore(MetaplexCoreUpdate),
     None,
 }
 
@@ -50,7 +59,7 @@ macro_rules! update_field {
 }
 
 async fn index_account_update(setup: &TestSetup, pubkey: Pubkey, update: AccountUpdate, slot: u64) {
-    let account_bytes = cached_fetch_account(setup, pubkey, None).await;
+    let account_bytes = cached_fetch_account(&setup, pubkey.clone(), None).await;
 
     let account_info = root_as_account_info(&account_bytes).unwrap();
     let account_data = account_info.data().unwrap().iter().collect::<Vec<_>>();
@@ -90,7 +99,18 @@ async fn index_account_update(setup: &TestSetup, pubkey: Pubkey, update: Account
             update_field!(account.primary_sale_happened, primary_sale_happened);
             update_field!(account.is_mutable, is_mutable);
 
-            account.try_to_vec().unwrap()
+            borsh::to_vec(&account).unwrap()
+        }
+        AccountUpdate::MetaplexCore(MetaplexCoreUpdate { owner }) => {
+            let mut cloned_data = account_data.clone();
+            let data = cloned_data.as_mut_slice();
+            let data_ref = &mut (&*data);
+
+            let mut account = BaseAssetV1::deserialize(data_ref).unwrap();
+
+            update_field!(account.owner, owner);
+
+            borsh::to_vec(&account).unwrap()
         }
         AccountUpdate::None => account_data,
     };
@@ -110,7 +130,7 @@ async fn index_account_update(setup: &TestSetup, pubkey: Pubkey, update: Account
     let is_startup = false;
 
     let fbb = serialize_account(fbb, &account_info, slot, is_startup);
-    index_account_bytes(setup, fbb.finished_data().to_vec()).await;
+    index_account_bytes(setup, fbb.finished_data().to_vec(), pubkey).await;
 }
 
 #[tokio::test]
@@ -236,5 +256,76 @@ async fn test_account_updates() {
             format!("{}-with-all-updates", name),
             setup.das_api.get_asset(request.clone()).await.unwrap()
         );
+    }
+}
+
+#[tokio::test]
+#[serial]
+#[named]
+async fn test_metaplex_core_transfers() {
+    let name = trim_test_name(function_name!());
+    let setup = TestSetup::new_with_options(
+        name.clone(),
+        TestSetupOptions {
+            network: Some(Network::Mainnet),
+        },
+    )
+    .await;
+
+    let nft = "7W7sp78GUVUwVbTBRf1dgNXrYgLHicErtWFrABrjSQhd";
+    let unrelated_nft = "5GNRtLjx2oKWc8AXXH5p1wNHoTP2eiEv9bZT7maEjGCb";
+    let original_owner = "76Km81uEfC2paMTJ8e81wYffo6vWrZZZiaqqkLF3ozq9";
+    let next_owner = "7uScVQiT4vArB88dHrZoeVKWbtsRJmNp9r5Gce5VQpXS";
+    let unrelated_nft_owner = "9oEp164tj4SiLmZdBAK3DorsXyKogTwtBRq7qsnp3cye";
+
+    let updates = [
+        (AccountUpdate::None, DEFAULT_SLOT),
+        (
+            AccountUpdate::MetaplexCore(MetaplexCoreUpdate {
+                owner: Pubkey::try_from(next_owner).unwrap(),
+            }),
+            DEFAULT_SLOT + 1,
+        ),
+    ];
+
+    let permutations = updates.iter().permutations(2).collect::<Vec<_>>();
+    for perm in permutations {
+        apply_migrations_and_delete_data(setup.db.clone()).await;
+        index_account_update(
+            &setup,
+            Pubkey::try_from(unrelated_nft).unwrap(),
+            AccountUpdate::None,
+            DEFAULT_SLOT - 1,
+        )
+        .await;
+
+        for (update, slot) in perm {
+            index_account_update(
+                &setup,
+                Pubkey::try_from(nft).unwrap(),
+                update.clone(),
+                slot.clone(),
+            )
+            .await;
+        }
+
+        for owner in [original_owner, next_owner, unrelated_nft_owner] {
+            let request = api::GetAssetsByOwner {
+                owner_address: owner.to_string(),
+                options: Some(Options {
+                    show_fungible: true,
+                    show_grand_total: true,
+                    ..Default::default()
+                }),
+                ..api::GetAssetsByOwner::default()
+            };
+
+            let response = setup
+                .das_api
+                .get_assets_by_owner(request.clone())
+                .await
+                .unwrap();
+            insta::assert_json_snapshot!(format!("{}-{}", name, owner), response);
+        }
     }
 }

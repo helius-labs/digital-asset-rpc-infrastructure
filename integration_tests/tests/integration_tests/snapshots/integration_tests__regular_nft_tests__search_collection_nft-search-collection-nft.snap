@@ -1,0 +1,82 @@
+---
+source: integration_tests/tests/integration_tests/regular_nft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w",
+  "items": [
+    {
+      "interface": "ProgrammableNFT",
+      "id": "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://madlads-collection.s3.us-west-2.amazonaws.com/_collection.json",
+        "files": [],
+        "metadata": {
+          "name": "Mad Lads",
+          "symbol": "MAD",
+          "token_standard": "ProgrammableNonFungible"
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.05,
+        "basis_points": 500,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": true,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "2RtGg6fsFiiF1EQzHqbd66AhW7R5bWeQGpTbv2UMkCdW"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "token_info": {
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "BvRSMZ6XHyiy45kN84F2YRhpX5SVwtyWN1YPzpyMZNBx"
+      },
+      "group_definition": {
+        "group_key": "collection",
+        "group_value": "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w",
+        "size": 9967
+      }
+    }
+  ]
+}

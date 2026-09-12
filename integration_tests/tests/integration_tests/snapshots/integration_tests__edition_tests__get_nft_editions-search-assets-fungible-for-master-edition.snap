@@ -1,0 +1,10 @@
+---
+source: integration_tests/tests/integration_tests/edition_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 0,
+  "limit": 1000,
+  "items": []
+}

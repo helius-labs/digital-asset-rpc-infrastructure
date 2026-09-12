@@ -1,0 +1,14 @@
+// Flatbuffer IDL for Slot Status Info schema.
+
+
+
+enum Status:byte { Processed, Rooted, Confirmed }
+
+table SlotStatusInfo {
+  slot:uint64;
+  parent:uint64 = null;
+  status:Status;
+  seen_at: int64;
+}
+
+root_type SlotStatusInfo;

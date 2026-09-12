@@ -1,0 +1,93 @@
+---
+source: integration_tests/tests/integration_tests/cnft_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "6cbucQmGXAkfF2wu6P4KgHKUqDfp8e97wkm13NTFAx4p",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://arweave.net/oAbfZDy-Ac3xbUGdBJaW_GzNo9GTEYDlWqwusvffCig?tp=&std=cE&mV=7fh3]S&mC=86hW8",
+    "files": [],
+    "metadata": {
+      "name": "Bonk Gogh",
+      "symbol": "! ",
+      "token_standard": "NonFungible"
+    },
+    "links": {}
+  },
+  "authorities": [
+    {
+      "address": "AbuYCqNHw2ytVp2insCcWpXqyfwZhMasqq4R9qJwqtu3",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": true,
+    "data_hash": "DhpTR5JRq2j3poGVpyPHYFLftgXjrmQx6oLJ2uQHewTu",
+    "creator_hash": "C1KjAR5zu6GT75CCPbfYoxTD7qYYSAa1atWZJYeC6aZe",
+    "asset_hash": "PotAjM8yPuE4iFdifuCdrHfnoxgpvki3jreMzNxtrRV",
+    "tree": "4GQ32bJ6F6hGnASo836rVbpxWRaeGzj3xkP3pmHnRwiz",
+    "seq": 5816,
+    "leaf_id": 4210
+  },
+  "grouping": [
+    {
+      "group_key": "collection",
+      "group_value": "8H8GQpBgEy1A4TkDfQvYvcDXQaaFCp6pPs3WzgMfe6LW"
+    }
+  ],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.069,
+    "basis_points": 690,
+    "primary_sale_happened": true,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "9iygDei1FbZAwCS6xjypXhpWAECSyiEP3TukeNpBGvDw",
+      "share": 0,
+      "verified": false
+    },
+    {
+      "address": "6u4xRqdxyD3zuj3skMzPJMSrR3eB3vxrFN7FsUCvqxpF",
+      "share": 100,
+      "verified": false
+    },
+    {
+      "address": "4kfXxBM9BBBMheSKdz2oKuqhF72dp8ELeRuxaG12wPFD",
+      "share": 0,
+      "verified": true
+    },
+    {
+      "address": "AmQNs2kgw4LvS9sm6yE9JJ4Hs3JpVu65eyx9pxMG2xA",
+      "share": 0,
+      "verified": true
+    },
+    {
+      "address": "Ca5y5sY6155RDUKuNeEFkFNSttay1QUxDToNfErsDa69",
+      "share": 0,
+      "verified": true
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "Eb7p5aXPR7RRC3izkBHkYCTz46Tp3xExqrrJSEUMgv4N"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false
+}

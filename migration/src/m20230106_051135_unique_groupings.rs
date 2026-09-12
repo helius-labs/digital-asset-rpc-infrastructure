@@ -1,7 +1,5 @@
 use sea_orm_migration::prelude::*;
 
-use crate::model::table::AssetGrouping;
-
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
@@ -12,7 +10,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 sea_query::Index::drop()
                     .name("asset_grouping_value")
-                    .table(AssetGrouping::Table)
+                    .table(Alias::new("asset_grouping"))
                     .to_owned(),
             )
             .await?;
@@ -21,9 +19,9 @@ impl MigrationTrait for Migration {
                 Index::create()
                     .unique()
                     .name("asset_grouping_key_unique")
-                    .col(AssetGrouping::AssetId)
-                    .col(AssetGrouping::GroupKey)
-                    .table(AssetGrouping::Table)
+                    .col(Alias::new("asset_id"))
+                    .col(Alias::new("group_key"))
+                    .table(Alias::new("asset_grouping"))
                     .to_owned(),
             )
             .await?;
@@ -35,7 +33,7 @@ impl MigrationTrait for Migration {
             .drop_index(
                 sea_query::Index::drop()
                     .name("asset_grouping_key_unique")
-                    .table(AssetGrouping::Table)
+                    .table(Alias::new("asset_grouping"))
                     .to_owned(),
             )
             .await?;
@@ -44,9 +42,9 @@ impl MigrationTrait for Migration {
             .create_index(
                 sea_query::Index::create()
                     .name("asset_grouping_value")
-                    .col(AssetGrouping::AssetId)
-                    .col(AssetGrouping::GroupKey)
-                    .table(AssetGrouping::Table)
+                    .col(Alias::new("asset_id"))
+                    .col(Alias::new("group_key"))
+                    .table(Alias::new("asset_grouping"))
                     .to_owned(),
             )
             .await?;

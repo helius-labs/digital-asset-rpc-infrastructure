@@ -1,0 +1,52 @@
+[package]
+authors = ["Metaplex Developers <dev@metaplex.com>"]
+description = "Metaplex canonical program parsers, for indexing, analytics etc...."
+edition = "2021"
+license = "AGPL-3.0"
+name = "blockbuster"
+repository = "https://github.com/metaplex-foundation/blockbuster"
+version = "0.8.0"
+
+[dependencies]
+async-trait = { workspace = true }
+borsh = { workspace = true }
+bs58 = { workspace = true }
+bytemuck = { workspace = true }
+flatbuffers = { workspace = true}
+lazy_static = { workspace = true}
+log = { workspace = true}
+mpl-account-compression = { workspace = true}
+mpl-noop = { workspace = true}
+mpl-bubblegum = { workspace = true}
+mpl-core = { workspace = true}
+mpl-token-metadata = { workspace = true}
+plerkle_serialization = { workspace = true }
+serde = { workspace = true}
+solana-sdk = { workspace = true}
+spl-pod = { workspace = true}
+spl-token = { workspace = true}
+spl-token-2022 = { workspace = true}
+spl-token-2022-interface = { workspace = true }
+spl-token-group-interface = { workspace = true}
+spl-token-metadata-interface = { workspace = true}
+solana-zk-sdk-pod = { workspace = true }
+thiserror = { workspace = true}
+spl-type-length-value = { workspace = true}
+
+[dev-dependencies]
+rand = { workspace = true}
+serde_json = { workspace = true}
+solana-client = { workspace = true}
+solana-transaction-status = { workspace = true}
+agave-geyser-plugin-interface = { workspace = true}
+base64 = { workspace = true}
+
+# Dev profile with faster compilation, but no debug info
+[profile.dev-fast]
+# Inherit all defaults from dev profile
+inherits = "dev"
+# Sacrifice debug info and debugger usage for ~70% faster incremental compilation and 100% faster end-to-end compilation.
+debug = 0
+# Some standard library files already come precompiled with debuginfo. We strip it for faster linking
+# and smaller binaries.
+strip = "debuginfo"

@@ -1,6 +1,7 @@
 use crate::dao::scopes;
 use crate::dao::PageOptions;
 
+use crate::dapi::last_indexed_slot::load_last_indexed_slot;
 use crate::rpc::filter::AssetSortDirection;
 use crate::rpc::response::TransactionSignatureList;
 use sea_orm::DatabaseConnection;
@@ -16,6 +17,7 @@ pub async fn get_asset_signatures(
     page_options: PageOptions,
     sort_direction: Option<AssetSortDirection>,
 ) -> Result<TransactionSignatureList, DbErr> {
+    let last_indexed_slot = load_last_indexed_slot(db).await?;
     let pagination = create_pagination(&page_options)?;
     let transactions = scopes::asset::get_asset_signatures(
         db,
@@ -28,6 +30,7 @@ pub async fn get_asset_signatures(
     )
     .await?;
     Ok(build_transaction_signatures_response(
+        last_indexed_slot,
         transactions,
         page_options.limit,
         &pagination,

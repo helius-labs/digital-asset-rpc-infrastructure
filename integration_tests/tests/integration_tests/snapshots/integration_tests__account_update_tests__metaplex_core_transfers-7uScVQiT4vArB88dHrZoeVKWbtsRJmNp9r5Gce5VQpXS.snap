@@ -1,0 +1,81 @@
+---
+source: integration_tests/tests/integration_tests/account_update_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "7W7sp78GUVUwVbTBRf1dgNXrYgLHicErtWFrABrjSQhd",
+  "items": [
+    {
+      "interface": "MplCoreAsset",
+      "id": "7W7sp78GUVUwVbTBRf1dgNXrYgLHicErtWFrABrjSQhd",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://arweave.net/vMW9Mmmud8c9npY2Or4zN7nJ_Crp92VvjF4XCMiPNBo",
+        "files": [],
+        "metadata": {
+          "name": "XPUNKS #2276",
+          "symbol": ""
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "4CC85U9hM1HkGx9ow4Eiu3khfpo9KtoiMssrKD7cwNwP"
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.0,
+        "basis_points": 0,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "XPTF4HPULPxmT7NwNYipdHwPrctVx1Rja3YPtJxxkna",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "7uScVQiT4vArB88dHrZoeVKWbtsRJmNp9r5Gce5VQpXS"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "plugins": {},
+      "mpl_core_info": {
+        "plugins_json_version": 1
+      },
+      "external_plugins": [],
+      "is_agent": false
+    }
+  ]
+}

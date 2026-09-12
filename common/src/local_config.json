@@ -1,0 +1,37 @@
+{
+    "messenger_config": {
+        "messenger_type": "Redis",
+        "connection_config": {
+            "redis_connection_str": "redis://localhost",
+            "batch_size": 1
+        }
+    },
+    "database_url": "postgres://postgres@localhost/postgres",
+    "database_urls": "postgres://postgres@localhost/postgres",
+    "database_config": {
+        "listener_channel": "backfill_item_added",
+        "url": "postgres://postgres@localhost/postgres"
+    },
+    "role": "Ingester",
+    "rpc_url": "https://mainnet.helius-rpc.com/?api-key=<HELIUS_API_KEY>",
+    "rpc_config": {
+        "commitment": "finalized",
+        "url": "https://mainnet.helius-rpc.com/?api-key=<HELIUS_API_KEY>"
+    },
+    "grpc_url": "https://laserstream-mainnet-ewr.helius-rpc.com",
+    "grpc_auth_header": "<LASERSTREAM_API_KEY>",
+    "enable_fix_owner_job": false,
+    "fix_owner_interval_ms": 10000000,
+    "reindex_collections_interval_ms": 10000000,
+    "reindex_creators_interval_ms": 10000000,
+    "enable_account_closures_job": false,
+    "account_closures_interval_ms": 10000000,
+    "account_closures_checkpoint": null,
+    "account_closures_max_concurrent_calls": 10,
+    "account_closures_dryrun": false,
+    "enable_nft_burns_job": false,
+    "nft_burns_interval_ms": 10000000,
+    "nft_burns_checkpoint": null,
+    "nft_burns_max_concurrent_calls": 10,
+    "server_port": 9090
+}

@@ -3,6 +3,8 @@ source: integration_tests/tests/integration_tests/regular_nft_tests.rs
 expression: response
 ---
 {
+  "last_indexed_slot": 1,
+  "grand_total": 3,
   "total": 1,
   "limit": 1,
   "page": 1,
@@ -79,7 +81,13 @@ expression: response
       },
       "supply": null,
       "mutable": true,
-      "burnt": false
+      "burnt": false,
+      "token_info": {
+        "supply": 1,
+        "decimals": 0,
+        "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "associated_token_address": "Eft9Evw7Jqd5ZeDhpTXHbpv5ZrZ3tvc1paSXAqHd51cy"
+      }
     }
   ]
 }

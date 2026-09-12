@@ -15,13 +15,13 @@ pub struct StreamSizeTimer {
 }
 
 impl StreamSizeTimer {
-    pub const fn new(
-        interval: Duration,
+    pub fn new(
+        interval_time: Duration,
         messenger_config: MessengerConfig,
         stream: &'static str,
     ) -> Result<Self, IngesterError> {
         Ok(Self {
-            interval,
+            interval: interval_time,
             stream,
             messenger_config,
         })
@@ -29,7 +29,7 @@ impl StreamSizeTimer {
 
     pub async fn start<T: Messenger>(&mut self) -> Option<JoinHandle<()>> {
         metric! {
-            let i = self.interval;
+            let i = self.interval.clone();
             let messenger_config = self.messenger_config.clone();
             let stream = self.stream;
 

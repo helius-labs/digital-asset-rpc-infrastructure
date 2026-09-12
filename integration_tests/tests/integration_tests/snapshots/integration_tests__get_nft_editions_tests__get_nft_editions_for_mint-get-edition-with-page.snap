@@ -1,0 +1,25 @@
+---
+source: integration_tests/tests/integration_tests/get_nft_editions_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 2,
+  "limit": 2,
+  "page": 2,
+  "master_edition_address": "8SHfqzJYABeGfiG1apwiEYt6TvfGQiL1pdwEjvTKsyiZ",
+  "supply": 66,
+  "max_supply": 69,
+  "editions": [
+    {
+      "mint": "7AeRUkukNCpWFtxK2QBZr1PymzPde6qtQYND6CajrE2B",
+      "edition_address": "8WiF9TKG5p4YuyzYH2nCFxzpDMTjBeoF628QctSjJj21",
+      "edition": 3
+    },
+    {
+      "mint": "5bEXK3igzQHXchPz36bGGrvmVF39p8iB1NJVgA5hWH3h",
+      "edition_address": "7LH1ZhFHpgLL81HvFaKCYiRvXLaNTqwN1jo6z6eQeL7B",
+      "edition": 15
+    }
+  ]
+}

@@ -1,10 +1,15 @@
-use crate::dao::sea_orm_active_enums::{
-    OwnerType, RoyaltyTargetType, SpecificationAssetClass, SpecificationVersions,
+use crate::dao::{
+    sea_orm_active_enums::{
+        OwnerType, RoyaltyTargetType, SpecificationAssetClass, SpecificationVersions,
+    },
+    TokenInfo,
 };
+use serde_json::Value;
 #[cfg(feature = "sql_types")]
 use std::collections::BTreeMap;
 
 use crate::dao::sea_orm_active_enums::ChainMutability;
+use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use {
     serde::{Deserialize, Serialize},
@@ -13,6 +18,7 @@ use {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AssetProof {
+    pub last_indexed_slot: u64,
     pub root: String,
     pub proof: Vec<String>,
     pub node_index: i64,
@@ -26,14 +32,15 @@ pub enum Interface {
     V1NFT,
     #[serde(rename = "V1_PRINT")]
     V1PRINT,
-    #[serde(rename = "LEGACY_NFT")]
-    // TODO: change on version bump
     #[allow(non_camel_case_types)]
+    #[serde(rename = "LEGACY_NFT")]
     LEGACY_NFT,
     #[serde(rename = "V2_NFT")]
     Nft,
     #[serde(rename = "FungibleAsset")]
     FungibleAsset,
+    #[serde(rename = "FungibleToken")]
+    FungibleToken,
     #[serde(rename = "Custom")]
     Custom,
     #[serde(rename = "Identity")]
@@ -42,25 +49,58 @@ pub enum Interface {
     Executable,
     #[serde(rename = "ProgrammableNFT")]
     ProgrammableNFT,
+    #[serde(rename = "MplCoreAsset")]
+    MplCoreAsset,
+    #[serde(rename = "MplBubblegumV2")]
+    MplBubblegumV2,
+    #[serde(rename = "MplCoreCollection")]
+    MplCoreCollection,
+    #[serde(rename = "MplCoreGroup")]
+    MplCoreGroup,
 }
 
-impl From<(&SpecificationVersions, &SpecificationAssetClass)> for Interface {
-    fn from(i: (&SpecificationVersions, &SpecificationAssetClass)) -> Self {
+impl From<(&SpecificationVersions, &SpecificationAssetClass, &u64)> for Interface {
+    fn from(i: (&SpecificationVersions, &SpecificationAssetClass, &u64)) -> Self {
         match i {
-            (SpecificationVersions::V1, SpecificationAssetClass::Nft) => Interface::V1NFT,
-            (SpecificationVersions::V1, SpecificationAssetClass::PrintableNft) => Interface::V1NFT,
-            (SpecificationVersions::V0, SpecificationAssetClass::Nft) => Interface::LEGACY_NFT,
-            (SpecificationVersions::V1, SpecificationAssetClass::ProgrammableNft) => {
+            // Temporary hack to fix marking of t22s as NFTs.
+            (SpecificationVersions::V1, SpecificationAssetClass::Nft, supply) if *supply > 1 => {
+                Interface::FungibleToken
+            }
+            (SpecificationVersions::V1, SpecificationAssetClass::Nft, _)
+            | (SpecificationVersions::V1, SpecificationAssetClass::PrintableNft, _) => {
+                Interface::V1NFT
+            }
+
+            (SpecificationVersions::V0, SpecificationAssetClass::Nft, _) => Interface::LEGACY_NFT,
+
+            (SpecificationVersions::V1, SpecificationAssetClass::FungibleAsset, _) => {
+                Interface::FungibleAsset
+            }
+            (SpecificationVersions::V1, SpecificationAssetClass::FungibleToken, _) => {
+                Interface::FungibleToken
+            }
+
+            (SpecificationVersions::V1, SpecificationAssetClass::ProgrammableNft, _) => {
                 Interface::ProgrammableNFT
             }
+
+            (SpecificationVersions::V1, SpecificationAssetClass::Unknown, supply)
+                if *supply > 1 =>
+            {
+                Interface::FungibleToken
+            }
+            (_, SpecificationAssetClass::MplCoreAsset, _) => Interface::MplCoreAsset,
+            (_, SpecificationAssetClass::MplCoreCollection, _) => Interface::MplCoreCollection,
+            (_, SpecificationAssetClass::MplCoreGroup, _) => Interface::MplCoreGroup,
+            (_, SpecificationAssetClass::MplBubblegumV2, _) => Interface::MplBubblegumV2,
             _ => Interface::Custom,
         }
     }
 }
 
-impl From<Interface> for (SpecificationVersions, SpecificationAssetClass) {
-    fn from(interface: Interface) -> (SpecificationVersions, SpecificationAssetClass) {
-        match interface {
+impl Into<(SpecificationVersions, SpecificationAssetClass)> for Interface {
+    fn into(self) -> (SpecificationVersions, SpecificationAssetClass) {
+        match self {
             Interface::V1NFT => (SpecificationVersions::V1, SpecificationAssetClass::Nft),
             Interface::LEGACY_NFT => (SpecificationVersions::V0, SpecificationAssetClass::Nft),
             Interface::ProgrammableNFT => (
@@ -71,6 +111,22 @@ impl From<Interface> for (SpecificationVersions, SpecificationAssetClass) {
             Interface::FungibleAsset => (
                 SpecificationVersions::V1,
                 SpecificationAssetClass::FungibleAsset,
+            ),
+            Interface::FungibleToken => (
+                SpecificationVersions::V1,
+                SpecificationAssetClass::FungibleToken,
+            ),
+            Interface::MplCoreAsset => (
+                SpecificationVersions::V1,
+                SpecificationAssetClass::MplCoreAsset,
+            ),
+            Interface::MplCoreCollection => (
+                SpecificationVersions::V1,
+                SpecificationAssetClass::MplCoreCollection,
+            ),
+            Interface::MplCoreGroup => (
+                SpecificationVersions::V1,
+                SpecificationAssetClass::MplCoreGroup,
             ),
             _ => (SpecificationVersions::V1, SpecificationAssetClass::Unknown),
         }
@@ -108,6 +164,8 @@ pub struct File {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cdn_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mime: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quality: Option<Quality>,
@@ -117,15 +175,15 @@ pub struct File {
 
 pub type Files = Vec<File>;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct MetadataMap(BTreeMap<String, serde_json::Value>);
 
 impl MetadataMap {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self(BTreeMap::new())
     }
 
-    pub const fn inner(&self) -> &BTreeMap<String, serde_json::Value> {
+    pub fn inner(&self) -> &BTreeMap<String, serde_json::Value> {
         &self.0
     }
 
@@ -152,6 +210,8 @@ pub struct Content {
     pub metadata: MetadataMap,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub links: Option<Links>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -181,6 +241,10 @@ impl From<String> for Scope {
 pub struct Authority {
     pub address: String,
     pub scopes: Vec<Scope>,
+
+    // Used internally
+    #[serde(skip_serializing)]
+    pub asset_id: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -189,6 +253,12 @@ pub struct Compression {
     pub compressed: bool,
     pub data_hash: String,
     pub creator_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_data_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<u8>,
     pub asset_hash: String,
     pub tree: String,
     pub seq: i64,
@@ -201,9 +271,38 @@ pub type GroupValue = String;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Group {
     pub group_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub group_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_metadata: Option<CollectionMetadata>,
+
+    // Used internally
+    #[serde(skip_serializing)]
+    pub asset_id: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GroupDefinition {
+    pub group_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+
+    // Used internally
+    #[serde(skip_serializing)]
+    pub asset_id: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CollectionMetadata {
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub image: Option<String>,
+    pub description: Option<String>,
+    pub external_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]
@@ -254,10 +353,35 @@ pub type Share = String;
 pub type Verified = bool;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TokenAccount {
+    pub address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delegate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delegated_amount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_extensions: Option<Value>,
+    pub frozen: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Creator {
     pub address: String,
     pub share: i32,
     pub verified: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Owner {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub associated_token_address: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema)]
@@ -292,6 +416,8 @@ impl From<OwnerType> for OwnershipModel {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Ownership {
     pub frozen: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub non_transferable: Option<bool>,
     pub delegated: bool,
     pub delegate: Option<String>,
     pub ownership_model: OwnershipModel,
@@ -335,15 +461,35 @@ pub struct Uses {
     pub total: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct Supply {
-    pub print_max_supply: u64,
+    pub print_max_supply: Option<u64>,
     pub print_current_supply: u64,
     pub edition_nonce: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edition_number: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_edition_mint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SystemInfo {
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MplCoreInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub num_minted: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_size: Option<i32>,
+    pub plugins_json_version: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Asset {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_indexed_slot: Option<u64>,
     pub interface: Interface,
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -364,4 +510,41 @@ pub struct Asset {
     pub supply: Option<Supply>,
     pub mutable: bool,
     pub burnt: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mint_extensions: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_info: Option<TokenInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_definition: Option<GroupDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system: Option<SystemInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugins: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unknown_plugins: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mpl_core_info: Option<MplCoreInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_plugins: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unknown_external_plugins: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_agent: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_signer: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, JsonSchema, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct NotFilter {
+    #[serde(default)]
+    pub collections: Option<Vec<String>>,
+    #[serde(default)]
+    pub owners: Option<Vec<String>>,
+    #[serde(default)]
+    pub creators: Option<Vec<String>>,
+    #[serde(default)]
+    pub authorities: Option<Vec<String>>,
 }

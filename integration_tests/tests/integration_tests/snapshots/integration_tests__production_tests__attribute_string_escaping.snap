@@ -1,0 +1,87 @@
+---
+source: integration_tests/tests/integration_tests/production_tests.rs
+expression: response
+---
+{
+  "interface": "V1_NFT",
+  "id": "G75Fuvdqnixj6XFbBHRSLFb6jTnvW421oXMhC6nQBLgP",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://shdw-drive.genesysgo.net/4Vg6V7ME3B7vbo1xHhrPxGJu3ZviL3QgiWXLkxEGiHDp/49ef51d2-6f85-4eb4-9c53-2fc235f76867.json",
+    "files": [
+      {
+        "uri": "https://shdw-drive.genesysgo.net/3Vji7muShK1rWxtAfZtEAfy8LvXT3MqPV46JM468DKbD/9EFE90D2-2E3C-4745-9C3B-B8E3729FFF81.jpg",
+        "mime": "image/jpg"
+      }
+    ],
+    "metadata": {
+      "attributes": [
+        {
+          "trait_type": "Handmade",
+          "value": "Rug"
+        }
+      ],
+      "description": "OG Rug Shop",
+      "name": "Handmade Rugs",
+      "symbol": "",
+      "token_standard": "NonFungible"
+    },
+    "links": {
+      "image": "https://shdw-drive.genesysgo.net/3Vji7muShK1rWxtAfZtEAfy8LvXT3MqPV46JM468DKbD/9EFE90D2-2E3C-4745-9C3B-B8E3729FFF81.jpg",
+      "external_url": "https://docs.blxckout.xyz"
+    }
+  },
+  "authorities": [
+    {
+      "address": "BX5qCVqbxecoVyCsDASF34jNQCoGwGmdQDyBgPKeapTc",
+      "scopes": [
+        "full"
+      ]
+    }
+  ],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.05,
+    "basis_points": 500,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [
+    {
+      "address": "BX5qCVqbxecoVyCsDASF34jNQCoGwGmdQDyBgPKeapTc",
+      "share": 100,
+      "verified": true
+    }
+  ],
+  "ownership": {
+    "frozen": false,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "CHcgAN5Z3tiYQG59WNxsnAChAu762oxXBekaV1tLgXV"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": 255
+  },
+  "mutable": true,
+  "burnt": false,
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  }
+}

@@ -1,26 +1,35 @@
+use acc_backfill::{fetch_account_data_stream, send_account_stream};
+use acc_forwarder::get_token_largest_accounts;
+use digital_asset_types::{
+    dao::{scopes::asset::get_by_grouping, tokens, PageOptions},
+    dapi::common::{create_pagination, create_sorting},
+    rpc::{filter::AssetSorting, options::Options},
+};
+use nft_ingester::config::init_logger;
+use sea_orm::{ColumnTrait, Order, QueryOrder, QuerySelect};
+use sea_orm::{EntityTrait, QueryFilter, SqlxPostgresConnector};
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    PgPool,
+};
 use {
+    acc_forwarder::{
+        fetch_and_send_account, fetch_metadata_and_send_accounts, get_token_largest_account,
+    },
     anyhow::Context,
     clap::Parser,
     figment::{map, value::Value},
     futures::{future::try_join_all, stream::StreamExt},
+    governor::{Quota, RateLimiter},
     log::{info, warn},
-    mpl_token_metadata::accounts::Metadata,
-    plerkle_messenger::{MessengerConfig, ACCOUNT_BACKFILL_STREAM},
-    plerkle_serialization::{
-        serializer::serialize_account, solana_geyser_plugin_interface_shims::ReplicaAccountInfoV2,
-    },
-    prometheus::{IntCounter, Registry},
-    solana_account_decoder::{UiAccount, UiAccountEncoding},
+    mpl_token_metadata::accounts::{MasterEdition, Metadata},
+    plerkle_messenger::{MessengerConfig, ACCOUNT_STREAM},
     solana_client::{
-        nonblocking::rpc_client::RpcClient,
-        rpc_config::{RpcAccountInfoConfig, RpcTransactionConfig},
+        nonblocking::rpc_client::RpcClient, rpc_config::RpcTransactionConfig,
         rpc_request::RpcRequest,
-        rpc_response::{Response as RpcResponse, RpcTokenAccountBalance},
     },
+    solana_commitment_config::{CommitmentConfig, CommitmentLevel},
     solana_sdk::{
-        account::Account,
-        borsh0_10::try_from_slice_unchecked,
-        commitment_config::{CommitmentConfig, CommitmentLevel},
         pubkey::Pubkey,
         signature::Signature,
     },
@@ -28,15 +37,23 @@ use {
         EncodedConfirmedTransactionWithStatusMeta, EncodedTransaction, UiInstruction, UiMessage,
         UiParsedInstruction, UiTransactionEncoding,
     },
-    std::{collections::HashSet, env, str::FromStr, sync::Arc},
-    tokio::{sync::Mutex, time::Duration},
-    txn_forwarder::{find_signatures, read_lines, rpc_send_with_retries, save_metrics},
+    std::{collections::HashSet, num::NonZeroU32, str::FromStr, sync::Arc},
+    tokio::sync::Mutex,
+    txn_forwarder::{find_signatures, read_lines, rpc_tx_with_retries},
 };
 
-lazy_static::lazy_static! {
-    pub static ref ACC_FORWARDER_SENT: IntCounter = IntCounter::new(
-        "acc_forwarder_sent", "Number of sent accounts"
-    ).unwrap();
+/// Create a rate limiter with the specified requests per second
+fn create_rate_limiter(
+    requests_per_second: u32,
+) -> Arc<
+    RateLimiter<
+        governor::state::direct::NotKeyed,
+        governor::state::InMemoryState,
+        governor::clock::DefaultClock,
+    >,
+> {
+    let quota = Quota::per_second(NonZeroU32::new(requests_per_second).unwrap());
+    Arc::new(RateLimiter::direct(quota))
 }
 
 #[derive(Parser)]
@@ -46,26 +63,23 @@ struct Args {
     redis_url: String,
     #[arg(long)]
     rpc_url: String,
-    /// Size of signatures queue
-    #[arg(long, default_value_t = 25_000)]
-    signatures_history_queue: usize,
-    /// Path to prometheus output
-    #[arg(long)]
-    prom: Option<String>,
-    /// Prometheus metrics file update interval
-    #[arg(long, default_value_t = 1_000)]
-    prom_save_interval: u64,
+    #[arg(long, default_value = "500")]
+    max_rpc_calls_per_second: u32,
     #[command(subcommand)]
     action: Action,
 }
 
 #[derive(clap::Subcommand, Clone)]
 enum Action {
-    Single {
+    Account {
         #[arg(long)]
         account: String,
     },
-    Scenario {
+    AccountScenario {
+        #[arg(long)]
+        scenario_file: String,
+    },
+    MintScenario {
         #[arg(long)]
         scenario_file: String,
     },
@@ -74,11 +88,29 @@ enum Action {
         #[arg(long)]
         mint: String,
     },
+    Token {
+        #[arg(long)]
+        token: String,
+    },
     Collection {
         #[arg(long)]
         collection: String,
         #[arg(long, default_value_t = 25)]
         concurrency: usize,
+    },
+    CollectionV2 {
+        #[arg(long)]
+        collection: String,
+        #[arg(long)]
+        db_url: String,
+        #[arg(long, default_value_t = 100)]
+        concurrency: usize,
+    },
+    Token22 {
+        #[arg(long)]
+        db_url: String,
+        #[arg(long, default_value_t = 1000)]
+        batch_size: usize,
     },
 }
 
@@ -98,15 +130,11 @@ impl CollectionTransactionInfo {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env::set_var(
-        env_logger::DEFAULT_FILTER_ENV,
-        env::var_os(env_logger::DEFAULT_FILTER_ENV).unwrap_or_else(|| "info".into()),
-    );
-    env_logger::init();
+    init_logger();
 
     let args = Args::parse();
     let config_wrapper = Value::from(map! {
-        "redis_connection_str" => args.redis_url,
+        "redis_connection_str" => args.redis_url.clone(),
         "pipeline_size_bytes" => 1u128.to_string(),
     });
     let config = config_wrapper.into_dict().unwrap();
@@ -117,46 +145,117 @@ async fn main() -> anyhow::Result<()> {
     let mut messenger = plerkle_messenger::select_messenger(messenger_config)
         .await
         .unwrap();
-    messenger.add_stream(ACCOUNT_BACKFILL_STREAM).await.unwrap();
+    messenger.add_stream(ACCOUNT_STREAM).await.unwrap();
     messenger
-        .set_buffer_size(ACCOUNT_BACKFILL_STREAM, 10000000000000000)
+        .set_buffer_size(ACCOUNT_STREAM, 10000000000000000)
         .await;
     let messenger = Arc::new(Mutex::new(messenger));
-
-    // metrics
-    let registry = Registry::new();
-    registry.register(Box::new(ACC_FORWARDER_SENT.clone()))?;
-    let metrics_jh = save_metrics(
-        registry,
-        args.prom,
-        Duration::from_millis(args.prom_save_interval),
-    );
 
     let client = RpcClient::new(args.rpc_url.clone());
 
     match args.action {
-        Action::Single { account } => {
+        Action::Account { account } => {
             let pubkey = Pubkey::from_str(&account)
                 .with_context(|| format!("failed to parse account {account}"))?;
-            fetch_and_send_account(pubkey, &client, &messenger).await?;
+            fetch_and_send_account(pubkey, &client, &messenger, false).await?;
         }
-        Action::Scenario { scenario_file } => {
+        Action::AccountScenario { scenario_file } => {
             let mut accounts = read_lines(&scenario_file).await?;
             while let Some(maybe_account) = accounts.next().await {
-                let pubkey = maybe_account?.parse()?;
-                fetch_and_send_account(pubkey, &client, &messenger).await?;
+                match maybe_account {
+                    Ok(account) => match account.parse::<Pubkey>() {
+                        Ok(acc) => {
+                            match fetch_and_send_account(acc, &client, &messenger, false).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    warn!("Failed to fetch and send account: {:?}", e);
+                                    continue;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse account: {:?}", e);
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Failed to get next account: {:?}", e);
+                        continue;
+                    }
+                }
             }
         }
+        Action::MintScenario { scenario_file } => {
+            let mut accounts = read_lines(&scenario_file).await?;
+            while let Some(maybe_account) = accounts.next().await {
+                match maybe_account {
+                    Ok(account) => match account.parse() {
+                        Ok(mint) => {
+                            let metadata_account = Metadata::find_pda(&mint).0;
+                            let token_account = get_token_largest_account(&client, mint).await;
+
+                            match token_account {
+                                Ok(token_account) => {
+                                    for pubkey in &[mint, metadata_account, token_account] {
+                                        match fetch_and_send_account(
+                                            *pubkey, &client, &messenger, false,
+                                        )
+                                        .await
+                                        {
+                                            Ok(_) => {}
+                                            Err(e) => {
+                                                warn!("Failed to fetch and send account: {:?}", e);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => warn!("Failed to find mint account: {:?}", e),
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse account: {:?}", e);
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        warn!("Failed to get next account: {:?}", e);
+                        continue;
+                    }
+                }
+            }
+        }
+
         Action::Mint { mint } => {
             let mint =
                 Pubkey::from_str(&mint).with_context(|| format!("failed to parse mint {mint}"))?;
             let metadata_account = Metadata::find_pda(&mint).0;
+            let edition_account = MasterEdition::find_pda(&mint).0;
             let token_account = get_token_largest_account(&client, mint).await;
 
             match token_account {
                 Ok(token_account) => {
-                    for pubkey in &[mint, metadata_account, token_account] {
-                        fetch_and_send_account(*pubkey, &client, &messenger).await?;
+                    for pubkey in &[mint, metadata_account, token_account, edition_account] {
+                        fetch_and_send_account(*pubkey, &client, &messenger, false).await?;
+                    }
+                    fetch_and_send_account(edition_account, &client, &messenger, true).await?;
+                }
+                Err(e) => warn!("Failed to find mint account: {:?}", e),
+            }
+        }
+        Action::Token { token } => {
+            let mint = Pubkey::from_str(&token)
+                .with_context(|| format!("failed to parse mint {token}"))?;
+            let metadata_account = Metadata::find_pda(&mint).0;
+            match get_token_largest_accounts(&client, mint).await {
+                Ok(token_accounts) => {
+                    fetch_and_send_account(mint, &client, &messenger, false).await?;
+                    fetch_and_send_account(metadata_account, &client, &messenger, true).await?;
+                    let mut all_pubkeys = vec![];
+                    all_pubkeys.extend(token_accounts);
+
+                    for pubkey in all_pubkeys {
+                        fetch_and_send_account(pubkey, &client, &messenger, false).await?;
                     }
                 }
                 Err(e) => warn!("Failed to find mint account: {:?}", e),
@@ -171,10 +270,7 @@ async fn main() -> anyhow::Result<()> {
             let collection = Pubkey::from_str(&collection)
                 .with_context(|| format!("failed to parse collection {collection}"))?;
             let stream = Arc::new(Mutex::new(find_signatures(
-                collection,
-                client,
-                3, // max_retries
-                args.signatures_history_queue,
+                collection, client, None, None, 2_000, false,
             )));
 
             try_join_all((0..concurrency).map(|_| {
@@ -219,13 +315,152 @@ async fn main() -> anyhow::Result<()> {
             }))
             .await?;
         }
+        Action::CollectionV2 {
+            collection, db_url, ..
+        } => {
+            let rate_limiter = create_rate_limiter(args.max_rpc_calls_per_second);
+            let pool = setup_database(db_url).await;
+            let conn: sea_orm::DatabaseConnection =
+                SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+            let limit = 1000;
+            let page = 1;
+            let pagination_options = PageOptions {
+                limit,
+                page: Some(page),
+                before: None,
+                after: None,
+                cursor: None,
+            };
+            let pagination = create_pagination(&pagination_options)?;
+            let (sort_direction, sort_column) = create_sorting(AssetSorting::default());
+
+            let (assets, _) = get_by_grouping(
+                &conn,
+                "collection".to_string(),
+                collection,
+                sort_column,
+                sort_direction,
+                &pagination,
+                limit,
+                false,
+                &Options::default(),
+            )
+            .await?;
+
+            // Real concurrency is determined by rate limiter
+            let concurrency = 1000;
+            let assets_chunks: Vec<Vec<_>> = assets
+                .chunks(assets.len() / concurrency.max(1))
+                .map(|chunk| chunk.to_vec())
+                .collect();
+
+            try_join_all(assets_chunks.into_iter().map(|chunk| {
+                let rate_limiter = Arc::clone(&rate_limiter);
+                let client = RpcClient::new(args.rpc_url.clone());
+                let messenger = Arc::clone(&messenger);
+                async move {
+                    for asset in chunk {
+                        let asset_id = bs58::encode(asset.asset.id).into_string();
+                        info!("re-indexing asset: {}", asset_id);
+                        let mint = Pubkey::from_str(&asset_id).unwrap();
+                        rate_limiter.until_ready().await;
+                        let result = fetch_and_send_account(mint, &client, &messenger, false).await;
+                        if let Err(e) = result {
+                            warn!("Failed to fetch and send mint account for mint {mint}: {:?}", e);
+                        } else {
+                            info!("Successfully fetched and sent mint account for mint {mint}");
+                        }
+
+                        let metadata_account = Metadata::find_pda(&mint).0;
+                        rate_limiter.until_ready().await;
+                        // Might not have a metadata account if it's a t22
+                        let result =
+                            fetch_and_send_account(metadata_account, &client, &messenger, false)
+                                .await;
+                        if let Err(e) = result {
+                            warn!("Failed to fetch and send metadata account for mint {mint} and account {metadata_account}: {:?}", e);
+                        } else {
+                            info!("Successfully fetched and sent metadata account for mint {mint} and account {metadata_account}");
+                        }
+
+                        let token_account = match get_token_largest_account(&client, mint).await {
+                            Ok(token_account) => token_account,
+                            Err(e) => {
+                                warn!("Failed to get token account for mint {mint}: {:?}", e);
+                                continue;
+                            }
+                        };
+                        rate_limiter.until_ready().await;
+                        // Might not have a token account if it's a metaplex core account
+                        let result =
+                            fetch_and_send_account(token_account, &client, &messenger, false).await;
+                        if let Err(e) = result {
+                            warn!("Failed to fetch and send token account for mint {mint} and account {token_account}: {:?}", e);
+                        } else {
+                            info!("Successfully fetched and sent token account for mint {mint} and account {token_account}");
+                        }
+                    }
+                    Ok::<(), anyhow::Error>(())
+                }
+            }))
+            .await?;
+        }
+        Action::Token22 { db_url, batch_size } => {
+            // Run a script to get all token22 mint accounts
+            let pubkey_stream = get_token22_mint_accounts(db_url, batch_size).await;
+            let account_stream =
+                fetch_account_data_stream(args.rpc_url.clone(), pubkey_stream, true).await;
+            send_account_stream(account_stream, args.redis_url.clone()).await;
+        }
     }
 
-    metrics_jh.await
+    Ok(())
+}
+
+async fn get_token22_mint_accounts(db_url: String, batch_size: usize) -> Vec<Pubkey> {
+    let mut pubkeys = Vec::new();
+    let mut cursor: Option<Vec<u8>> = None;
+    let pool = match setup_database(db_url).await {
+        pool => pool,
+    };
+    let conn: sea_orm::DatabaseConnection = SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let token22_program = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").unwrap();
+
+    loop {
+        let mut filter = tokens::Column::TokenProgram.eq(token22_program.to_bytes().to_vec());
+        if let Some(cursor) = &cursor {
+            filter = filter.and(tokens::Column::Mint.lt(cursor.clone()));
+        }
+
+        let tokens = match tokens::Entity::find()
+            .filter(filter)
+            .order_by(tokens::Column::Mint, Order::Desc)
+            .limit(batch_size as u64)
+            .all(&conn)
+            .await
+        {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                panic!("Failed to get tokens: {:?}", e);
+            }
+        };
+
+        if tokens.is_empty() {
+            break;
+        }
+
+        for token in &tokens {
+            let pubkey = Pubkey::try_from(token.mint.as_slice()).unwrap();
+            pubkeys.push(pubkey);
+        }
+
+        cursor = tokens.last().map(|token| token.mint.clone());
+    }
+    pubkeys
 }
 
 // https://github.com/metaplex-foundation/get-collection/blob/main/get-collection-rs/src/crawl.rs
-// fetch tx and filter
+/// fetch tx and filter
 async fn collection_get_tx_info(
     client: &RpcClient,
     signature: Signature,
@@ -238,7 +473,7 @@ async fn collection_get_tx_info(
         max_supported_transaction_version: Some(u8::MAX),
     };
 
-    let tx: EncodedConfirmedTransactionWithStatusMeta = rpc_send_with_retries(
+    let tx: EncodedConfirmedTransactionWithStatusMeta = rpc_tx_with_retries(
         client,
         RpcRequest::GetTransaction,
         serde_json::json!([signature.to_string(), CONFIG]),
@@ -313,116 +548,13 @@ async fn collection_get_tx_info(
     })
 }
 
-// fetch metadata account and send mint account to redis
-async fn fetch_metadata_and_send_accounts(
-    pubkey: Pubkey,
-    client: &RpcClient,
-    messenger: &Arc<Mutex<Box<dyn plerkle_messenger::Messenger>>>,
-) -> anyhow::Result<()> {
-    let (account, _slot) = fetch_account(pubkey, client).await?;
-    let metadata: Metadata = try_from_slice_unchecked(&account.data)
-        .with_context(|| anyhow::anyhow!("failed to parse data for metadata account {pubkey}"))?;
-
-    info!("Fetching token largest accounts: {:?}", metadata.mint);
-    let token_account = get_token_largest_account(client, metadata.mint).await?;
-
-    for pubkey in &[metadata.mint, pubkey, token_account] {
-        fetch_and_send_account(*pubkey, client, messenger).await?;
-    }
-    Ok(())
-}
-
-// returns largest (NFT related) token account belonging to mint
-async fn get_token_largest_account(client: &RpcClient, mint: Pubkey) -> anyhow::Result<Pubkey> {
-    let response: RpcResponse<Vec<RpcTokenAccountBalance>> = rpc_send_with_retries(
-        client,
-        RpcRequest::Custom {
-            method: "getTokenLargestAccounts",
-        },
-        serde_json::json!([mint.to_string(),]),
-        3,
-        mint,
-    )
-    .await?;
-
-    match response.value.first() {
-        Some(account) => Pubkey::from_str(&account.address)
-            .with_context(|| format!("failed to parse account for mint {mint}")),
-        None => anyhow::bail!("no accounts for mint {mint}: burned nft?"),
-    }
-}
-
-// fetch account and slot with retries
-async fn fetch_account(pubkey: Pubkey, client: &RpcClient) -> anyhow::Result<(Account, u64)> {
-    const CONFIG: RpcAccountInfoConfig = RpcAccountInfoConfig {
-        encoding: Some(UiAccountEncoding::Base64Zstd),
-        commitment: Some(CommitmentConfig {
-            commitment: CommitmentLevel::Finalized,
-        }),
-        data_slice: None,
-        min_context_slot: None,
-    };
-
-    let response: RpcResponse<Option<UiAccount>> = rpc_send_with_retries(
-        client,
-        RpcRequest::GetAccountInfo,
-        serde_json::json!([pubkey.to_string(), CONFIG]),
-        3,
-        pubkey,
-    )
-    .await
-    .with_context(|| format!("failed to get account {pubkey}"))?;
-
-    let account: Account = response
-        .value
-        .ok_or_else(|| anyhow::anyhow!("failed to get account {pubkey}"))?
-        .decode()
-        .ok_or_else(|| anyhow::anyhow!("failed to parse account {pubkey}"))?;
-
-    Ok((account, response.context.slot))
-}
-
-// fetch account from node and send it to redis
-async fn fetch_and_send_account(
-    pubkey: Pubkey,
-    client: &RpcClient,
-    messenger: &Arc<Mutex<Box<dyn plerkle_messenger::Messenger>>>,
-) -> anyhow::Result<()> {
-    let (account, slot) = fetch_account(pubkey, client).await?;
-    send_account(pubkey, account, slot, messenger).await
-}
-
-// send account data to redis
-async fn send_account(
-    pubkey: Pubkey,
-    account: Account,
-    slot: u64,
-    messenger: &Arc<Mutex<Box<dyn plerkle_messenger::Messenger>>>,
-) -> anyhow::Result<()> {
-    let fbb = flatbuffers::FlatBufferBuilder::new();
-
-    let account_info = ReplicaAccountInfoV2 {
-        pubkey: &pubkey.to_bytes(),
-        lamports: account.lamports,
-        owner: &account.owner.to_bytes(),
-        executable: account.executable,
-        rent_epoch: account.rent_epoch,
-        data: &account.data,
-        write_version: 0,
-        txn_signature: None,
-    };
-    let is_startup = false;
-
-    let fbb = serialize_account(fbb, &account_info, slot, is_startup);
-    let bytes = fbb.finished_data();
-
-    messenger
-        .lock()
+pub async fn setup_database(db_url: String) -> PgPool {
+    let options: PgConnectOptions = db_url.parse().unwrap();
+    let pool = PgPoolOptions::new()
+        .min_connections(1)
+        .max_connections(5)
+        .connect_with(options)
         .await
-        .send(ACCOUNT_BACKFILL_STREAM, bytes)
-        .await?;
-    info!("sent account {} to stream", pubkey);
-    ACC_FORWARDER_SENT.inc();
-
-    Ok(())
+        .unwrap();
+    pool
 }

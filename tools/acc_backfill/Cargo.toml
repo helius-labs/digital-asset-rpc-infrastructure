@@ -1,0 +1,35 @@
+[package]
+edition = "2021"
+name = "acc_backfill"
+publish = false
+version = "0.0.1"
+
+[dependencies]
+anyhow = {workspace = true}
+bs58 = {workspace = true}
+clap = {workspace = true}
+digital_asset_types = {workspace = true}
+env_logger = {workspace = true}
+figment = {workspace = true}
+flatbuffers = {workspace = true}
+futures = {workspace = true}
+log = {workspace = true}
+mpl-token-metadata = {workspace = true}
+nft_ingester = {workspace = true}
+plerkle_messenger = {workspace = true}
+plerkle_serialization = {workspace = true}
+reqwest = {workspace = true}
+sea-orm = {workspace = true}
+sea-query = {workspace = true}
+serde_json = {workspace = true}
+solana-account-decoder = {workspace = true}
+solana-client = {workspace = true}
+solana-commitment-config = {workspace = true}
+solana-sdk = {workspace = true}
+solana-system-interface = {workspace = true}
+solana-transaction-status = {workspace = true}
+spl-token = {workspace = true}
+sqlx = {workspace = true}
+tokio = {workspace = true}
+txn_forwarder = {workspace = true}
+async-stream = {workspace = true}

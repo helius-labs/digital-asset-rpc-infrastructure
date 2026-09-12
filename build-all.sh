@@ -16,7 +16,3 @@ popd
 pushd migration
 cargo build
 popd
-
-pushd metaplex-rpc-proxy
-cargo build
-popd

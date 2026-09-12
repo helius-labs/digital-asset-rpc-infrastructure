@@ -1,0 +1,100 @@
+---
+source: integration_tests/tests/integration_tests/account_update_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "5GNRtLjx2oKWc8AXXH5p1wNHoTP2eiEv9bZT7maEjGCb",
+  "items": [
+    {
+      "interface": "MplCoreAsset",
+      "id": "5GNRtLjx2oKWc8AXXH5p1wNHoTP2eiEv9bZT7maEjGCb",
+      "content": {
+        "$schema": "https://schema.metaplex.com/nft1.0.json",
+        "json_uri": "https://arweave.net/ELED0qvkdgUQAk5pDb3P_2EQuBjengvrC1illXdky7Q",
+        "files": [],
+        "metadata": {
+          "name": "XPUNKS #4245",
+          "symbol": ""
+        },
+        "links": {}
+      },
+      "authorities": [
+        {
+          "address": "",
+          "scopes": [
+            "full"
+          ]
+        }
+      ],
+      "compression": {
+        "eligible": false,
+        "compressed": false,
+        "data_hash": "",
+        "creator_hash": "",
+        "asset_hash": "",
+        "tree": "",
+        "seq": 0,
+        "leaf_id": 0
+      },
+      "grouping": [
+        {
+          "group_key": "collection",
+          "group_value": "4CC85U9hM1HkGx9ow4Eiu3khfpo9KtoiMssrKD7cwNwP"
+        }
+      ],
+      "royalty": {
+        "royalty_model": "creators",
+        "target": null,
+        "percent": 0.05,
+        "basis_points": 500,
+        "primary_sale_happened": false,
+        "locked": false
+      },
+      "creators": [
+        {
+          "address": "XPTF4HPULPxmT7NwNYipdHwPrctVx1Rja3YPtJxxkna",
+          "share": 100,
+          "verified": true
+        }
+      ],
+      "ownership": {
+        "frozen": false,
+        "delegated": false,
+        "delegate": null,
+        "ownership_model": "single",
+        "owner": "9oEp164tj4SiLmZdBAK3DorsXyKogTwtBRq7qsnp3cye"
+      },
+      "supply": null,
+      "mutable": true,
+      "burnt": false,
+      "plugins": {
+        "royalties": {
+          "data": {
+            "creators": [
+              {
+                "address": "XPTF4HPULPxmT7NwNYipdHwPrctVx1Rja3YPtJxxkna",
+                "percentage": 100
+              }
+            ],
+            "rule_set": "None",
+            "basis_points": 500
+          },
+          "index": 0,
+          "offset": 159,
+          "authority": {
+            "type": "UpdateAuthority",
+            "address": null
+          }
+        }
+      },
+      "mpl_core_info": {
+        "plugins_json_version": 1
+      },
+      "external_plugins": [],
+      "is_agent": false
+    }
+  ]
+}

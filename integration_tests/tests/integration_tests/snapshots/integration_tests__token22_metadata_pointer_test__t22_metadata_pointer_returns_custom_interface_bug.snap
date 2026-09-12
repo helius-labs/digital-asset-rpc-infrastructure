@@ -1,0 +1,78 @@
+---
+source: integration_tests/tests/integration_tests/token22_metadata_pointer_test.rs
+assertion_line: 67
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "interface": "V1_NFT",
+  "id": "2a8JV3mV2V4QFZjv91VGmPHA3AD1erGNqmuHZFCsTxMB",
+  "content": {
+    "$schema": "https://schema.metaplex.com/nft1.0.json",
+    "json_uri": "https://gateway.irys.xyz/sdC49xODdtnWp4U0_72Vp1Bx48QIq7ofR3nqPp78LO0",
+    "files": [],
+    "metadata": {
+      "name": "Seeker Genesis Token",
+      "symbol": "SeekerGT"
+    },
+    "links": {}
+  },
+  "authorities": [],
+  "compression": {
+    "eligible": false,
+    "compressed": false,
+    "data_hash": "",
+    "creator_hash": "",
+    "asset_hash": "",
+    "tree": "",
+    "seq": 0,
+    "leaf_id": 0
+  },
+  "grouping": [],
+  "royalty": {
+    "royalty_model": "creators",
+    "target": null,
+    "percent": 0.0,
+    "basis_points": 0,
+    "primary_sale_happened": false,
+    "locked": false
+  },
+  "creators": [],
+  "ownership": {
+    "frozen": true,
+    "delegated": false,
+    "delegate": null,
+    "ownership_model": "single",
+    "owner": "499bFPwfM7v85ioyqMUNaPKw6JkwFh57TmkrbbmPWLHG"
+  },
+  "supply": {
+    "print_max_supply": 0,
+    "print_current_supply": 0,
+    "edition_nonce": null
+  },
+  "mutable": true,
+  "burnt": false,
+  "mint_extensions": {
+    "metadata_pointer": {
+      "authority": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4",
+      "metadata_address": "GT22s89nU4iWFkNXj1Bw6uYhJJWDRPpShHt4Bk8f99Te"
+    },
+    "permanent_delegate": {
+      "delegate": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4"
+    },
+    "group_member_pointer": {
+      "authority": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4",
+      "member_address": "2a8JV3mV2V4QFZjv91VGmPHA3AD1erGNqmuHZFCsTxMB"
+    },
+    "mint_close_authority": {
+      "close_authority": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4"
+    }
+  },
+  "token_info": {
+    "supply": 1,
+    "decimals": 0,
+    "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "mint_authority": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4",
+    "freeze_authority": "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4"
+  }
+}

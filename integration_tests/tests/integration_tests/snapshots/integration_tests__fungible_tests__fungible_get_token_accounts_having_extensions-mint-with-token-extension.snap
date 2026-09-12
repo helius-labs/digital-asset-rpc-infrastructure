@@ -1,0 +1,28 @@
+---
+source: integration_tests/tests/integration_tests/fungible_tests.rs
+expression: response
+---
+{
+  "last_indexed_slot": 1,
+  "total": 1,
+  "limit": 1000,
+  "cursor": "4Ueynth2yBaDCEnn2oqh2xpwYYjxzngQ5arayotGDdC6",
+  "token_accounts": [
+    {
+      "address": "4Ueynth2yBaDCEnn2oqh2xpwYYjxzngQ5arayotGDdC6",
+      "mint": "J8QBq4Er3wYdmM4Eeg4b5Z6TioygY8b5fHVkDNtdLve4",
+      "owner": "B9fcrRtNZK1j29sfPhrdrcbNwkrNcEGWNu7XFApt56ww",
+      "amount": 0,
+      "delegated_amount": 0,
+      "token_extensions": {
+        "cpi_guard": {
+          "lock_cpi": true
+        },
+        "memo_transfer": {
+          "require_incoming_transfer_memos": true
+        }
+      },
+      "frozen": false
+    }
+  ]
+}

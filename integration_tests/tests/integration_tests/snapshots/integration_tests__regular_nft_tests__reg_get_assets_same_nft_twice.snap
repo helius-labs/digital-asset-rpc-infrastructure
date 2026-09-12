@@ -1,0 +1,148 @@
+---
+source: integration_tests/tests/integration_tests/regular_nft_tests.rs
+expression: response
+---
+[
+  {
+    "interface": "ProgrammableNFT",
+    "id": "EgGBxYtK2Esnasp9tPzqDyvEW46ZJ9KqeGHB6mdPvtWc",
+    "content": {
+      "$schema": "https://schema.metaplex.com/nft1.0.json",
+      "json_uri": "https://arweave.net/cn5-_jmlt7zAM1WW_FL9xrDZrc6zS7k7nQKzVaUYIDA",
+      "files": [],
+      "metadata": {
+        "name": "1998 #25 Ooyama's Pikachu PSA 10",
+        "symbol": "COLLECTOR",
+        "token_standard": "ProgrammableNonFungible"
+      },
+      "links": {}
+    },
+    "authorities": [
+      {
+        "address": "DQPERZ9e86pNJ4mhUnCEP8V75yxZofsipoVrRWT5Wdxd",
+        "scopes": [
+          "full"
+        ]
+      }
+    ],
+    "compression": {
+      "eligible": false,
+      "compressed": false,
+      "data_hash": "",
+      "creator_hash": "",
+      "asset_hash": "",
+      "tree": "",
+      "seq": 0,
+      "leaf_id": 0
+    },
+    "grouping": [
+      {
+        "group_key": "collection",
+        "group_value": "CCryptWBYktukHDQ2vHGtVcmtjXxYzvw8XNVY64YN2Yf"
+      }
+    ],
+    "royalty": {
+      "royalty_model": "creators",
+      "target": null,
+      "percent": 0.02,
+      "basis_points": 200,
+      "primary_sale_happened": false,
+      "locked": false
+    },
+    "creators": [
+      {
+        "address": "DQPERZ9e86pNJ4mhUnCEP8V75yxZofsipoVrRWT5Wdxd",
+        "share": 100,
+        "verified": false
+      }
+    ],
+    "ownership": {
+      "frozen": true,
+      "delegated": false,
+      "delegate": null,
+      "ownership_model": "single",
+      "owner": "LGNDXqcm6U57QQ6Ad7icZ6oizkAVKRWrw97KwZy5nVf"
+    },
+    "supply": null,
+    "mutable": true,
+    "burnt": false,
+    "token_info": {
+      "supply": 1,
+      "decimals": 0,
+      "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "mint_authority": "B7qUMUnFyC7uPBb6Yqmn4vyWs9bDdx8TgkZAF1xo5Gke",
+      "freeze_authority": "B7qUMUnFyC7uPBb6Yqmn4vyWs9bDdx8TgkZAF1xo5Gke"
+    }
+  },
+  {
+    "interface": "ProgrammableNFT",
+    "id": "EgGBxYtK2Esnasp9tPzqDyvEW46ZJ9KqeGHB6mdPvtWc",
+    "content": {
+      "$schema": "https://schema.metaplex.com/nft1.0.json",
+      "json_uri": "https://arweave.net/cn5-_jmlt7zAM1WW_FL9xrDZrc6zS7k7nQKzVaUYIDA",
+      "files": [],
+      "metadata": {
+        "name": "1998 #25 Ooyama's Pikachu PSA 10",
+        "symbol": "COLLECTOR",
+        "token_standard": "ProgrammableNonFungible"
+      },
+      "links": {}
+    },
+    "authorities": [
+      {
+        "address": "DQPERZ9e86pNJ4mhUnCEP8V75yxZofsipoVrRWT5Wdxd",
+        "scopes": [
+          "full"
+        ]
+      }
+    ],
+    "compression": {
+      "eligible": false,
+      "compressed": false,
+      "data_hash": "",
+      "creator_hash": "",
+      "asset_hash": "",
+      "tree": "",
+      "seq": 0,
+      "leaf_id": 0
+    },
+    "grouping": [
+      {
+        "group_key": "collection",
+        "group_value": "CCryptWBYktukHDQ2vHGtVcmtjXxYzvw8XNVY64YN2Yf"
+      }
+    ],
+    "royalty": {
+      "royalty_model": "creators",
+      "target": null,
+      "percent": 0.02,
+      "basis_points": 200,
+      "primary_sale_happened": false,
+      "locked": false
+    },
+    "creators": [
+      {
+        "address": "DQPERZ9e86pNJ4mhUnCEP8V75yxZofsipoVrRWT5Wdxd",
+        "share": 100,
+        "verified": false
+      }
+    ],
+    "ownership": {
+      "frozen": true,
+      "delegated": false,
+      "delegate": null,
+      "ownership_model": "single",
+      "owner": "LGNDXqcm6U57QQ6Ad7icZ6oizkAVKRWrw97KwZy5nVf"
+    },
+    "supply": null,
+    "mutable": true,
+    "burnt": false,
+    "token_info": {
+      "supply": 1,
+      "decimals": 0,
+      "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "mint_authority": "B7qUMUnFyC7uPBb6Yqmn4vyWs9bDdx8TgkZAF1xo5Gke",
+      "freeze_authority": "B7qUMUnFyC7uPBb6Yqmn4vyWs9bDdx8TgkZAF1xo5Gke"
+    }
+  }
+]
