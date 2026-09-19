@@ -22,16 +22,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::program_transformers::{
-    agent_registry::handle_agent_registry_account,
-    bubblegum::handle_bubblegum_instruction, token::handle_token_program_account,
-    token_extensions::handle_token_extensions_program_account,
+    agent_registry::handle_agent_registry_account, bubblegum::handle_bubblegum_instruction,
+    token::handle_token_program_account, token_extensions::handle_token_extensions_program_account,
     token_metadata::handle_token_metadata_account,
 };
 
 use self::{account_closure::handle_account_closure, mpl_core_program::handle_mpl_core_account};
 
-mod agent_registry;
 pub mod account_closure;
+mod agent_registry;
 mod asset_upserts;
 mod bubblegum;
 mod mpl_core_program;
@@ -304,10 +303,8 @@ impl ProgramTransformer {
                     err
                 }),
                 ProgramParseResult::AgentRegistry(parsing_result) => {
-                    let account_pubkey = Pubkey::try_from(
-                        acct.pubkey().unwrap().0.as_slice(),
-                    )
-                    .unwrap_or_default();
+                    let account_pubkey =
+                        Pubkey::try_from(acct.pubkey().unwrap().0.as_slice()).unwrap_or_default();
                     handle_agent_registry_account(
                         &self.storage,
                         account_pubkey,

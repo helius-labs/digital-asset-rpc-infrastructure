@@ -20,7 +20,7 @@ use std::{
 pub mod background_task_listener;
 pub mod background_task_manager;
 pub mod background_task_runner;
-mod common;
+pub(crate) mod common;
 pub use self::common::*;
 
 #[async_trait]

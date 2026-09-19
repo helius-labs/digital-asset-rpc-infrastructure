@@ -1,9 +1,19 @@
 use super::{BgTask, TaskData};
+use crate::tasks::common::{
+    holds_fetched_document, is_content_addressed, permanent_failure_is_fresh, TASK_NAME,
+};
 use crate::tasks::is_global_default_set;
 use crate::{error::IngesterError, metric, tasks::hash_task};
 use cadence_macros::{statsd_count, statsd_histogram};
 use chrono::Utc;
-use digital_asset_types::dao::{sea_orm_active_enums::TaskStatus, tasks};
+
+/// Why a download task needs no enqueueing, if it doesn't.
+enum Settled {
+    Immutable,
+    PermanentFailure,
+    No,
+}
+use digital_asset_types::dao::{offchain_metadata, sea_orm_active_enums::TaskStatus, tasks};
 use sea_orm::sea_query::OnConflict;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QueryTrait, Set,
@@ -62,6 +72,22 @@ impl BackgroundTaskListener {
                     }
                 }
 
+                match BackgroundTaskListener::settled_state(&pool, &task).await {
+                    Settled::Immutable => {
+                        metric! {
+                            statsd_count!("ingester.bgtask.immutable_not_enqueued", 1, "type" => task.name);
+                        }
+                        continue;
+                    }
+                    Settled::PermanentFailure => {
+                        metric! {
+                            statsd_count!("ingester.bgtask.permafail_not_enqueued", 1, "type" => task.name);
+                        }
+                        continue;
+                    }
+                    Settled::No => {}
+                }
+
                 if let Ok(hash) = hash_task(task.name.to_string(), task.data.clone()) {
                     let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
                     let task_entry = tasks::Entity::find_by_id(hash.clone())
@@ -81,6 +107,46 @@ impl BackgroundTaskListener {
                 }
             }
         })
+    }
+
+    /// A download task is settled when it can produce nothing new: the URI is a
+    /// content address whose document we already hold, or its last probe found the
+    /// document gone and the retry horizon has not elapsed. A settled task is
+    /// dropped before it reaches the `tasks` table, at the cost of one indexed
+    /// lookup. The row is fetched for every download task, served by the unique
+    /// index on `metadata_url`.
+    async fn settled_state(pool: &Pool<Postgres>, task: &TaskData) -> Settled {
+        if task.name != TASK_NAME {
+            return Settled::No;
+        }
+        let Some(uri) = task.data.get("uri").and_then(|u| u.as_str()) else {
+            return Settled::No;
+        };
+
+        let conn = SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone());
+        match offchain_metadata::Entity::find()
+            .filter(offchain_metadata::Column::MetadataUrl.eq(uri))
+            .one(&conn)
+            .await
+        {
+            Ok(Some(model)) => {
+                if model.reindex {
+                    return Settled::No;
+                }
+                if permanent_failure_is_fresh(&model) {
+                    return Settled::PermanentFailure;
+                }
+                if model.updated_at.is_some()
+                    && is_content_addressed(uri)
+                    && holds_fetched_document(&model.metadata)
+                {
+                    return Settled::Immutable;
+                }
+                Settled::No
+            }
+            // Never seen, or the lookup failed: enqueue and let the runner decide.
+            _ => Settled::No,
+        }
     }
 
     pub fn save_new_task(

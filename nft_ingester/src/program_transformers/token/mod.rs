@@ -68,7 +68,14 @@ where
         .build(DbBackend::Postgres);
 
     query.sql = format!(
-        "{} WHERE excluded.slot_updated >= owners.slot_updated OR owners.slot_updated IS NULL",
+        "{} WHERE (excluded.slot_updated >= owners.slot_updated OR owners.slot_updated IS NULL)
+        AND (excluded.owner, excluded.mint, excluded.delegate, excluded.slot_updated,
+             excluded.frozen, excluded.token_extensions, excluded.token_amount,
+             excluded.token_amount_u64, excluded.delegated_amount, excluded.token_program, excluded.closed)
+            IS DISTINCT FROM
+            (owners.owner, owners.mint, owners.delegate, owners.slot_updated,
+             owners.frozen, owners.token_extensions, owners.token_amount,
+             owners.token_amount_u64, owners.delegated_amount, owners.token_program, owners.closed)",
         query.sql
     );
     txn_or_conn
@@ -76,6 +83,44 @@ where
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     Ok(())
+}
+
+// Both token programs use the same ordering/no-op rule, but update different
+// extension columns. Preserve that distinction instead of clearing unrelated data.
+pub(super) fn token_mint_upsert(
+    model: tokens::ActiveModel,
+    extension_column: tokens::Column,
+) -> sea_orm::Statement {
+    use sea_orm::sea_query::Iden;
+    let extension_name = extension_column.to_string();
+    let mut query = tokens::Entity::insert(model)
+        .on_conflict(
+            OnConflict::columns([tokens::Column::Mint])
+                .update_columns([
+                    tokens::Column::Supply,
+                    tokens::Column::TokenProgram,
+                    tokens::Column::MintAuthority,
+                    tokens::Column::CloseAuthority,
+                    extension_column,
+                    tokens::Column::SlotUpdated,
+                    tokens::Column::Decimals,
+                    tokens::Column::FreezeAuthority,
+                ])
+                .to_owned(),
+        )
+        .build(DbBackend::Postgres);
+    query.sql = format!(
+        "{} WHERE excluded.slot_updated >= tokens.slot_updated
+        AND (excluded.supply, excluded.token_program, excluded.mint_authority,
+             excluded.close_authority, excluded.{extension_name}, excluded.slot_updated,
+             excluded.decimals, excluded.freeze_authority)
+            IS DISTINCT FROM
+            (tokens.supply, tokens.token_program, tokens.mint_authority,
+             tokens.close_authority, tokens.{extension_name}, tokens.slot_updated,
+             tokens.decimals, tokens.freeze_authority)",
+        query.sql
+    );
+    query
 }
 
 pub async fn handle_token_program_account<'a, 'b, 'c>(
@@ -221,26 +266,7 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
                 extensions: Set(None),
             };
 
-            let mut query = tokens::Entity::insert(model)
-                .on_conflict(
-                    OnConflict::columns([tokens::Column::Mint])
-                        .update_columns([
-                            tokens::Column::Supply,
-                            tokens::Column::TokenProgram,
-                            tokens::Column::MintAuthority,
-                            tokens::Column::CloseAuthority,
-                            tokens::Column::ExtensionData,
-                            tokens::Column::SlotUpdated,
-                            tokens::Column::Decimals,
-                            tokens::Column::FreezeAuthority,
-                        ])
-                        .to_owned(),
-                )
-                .build(DbBackend::Postgres);
-            query.sql = format!(
-                "{} WHERE excluded.slot_updated >= tokens.slot_updated",
-                query.sql
-            );
+            let query = token_mint_upsert(model, tokens::Column::ExtensionData);
             db.execute(query).await?;
 
             let asset_update: Option<asset::Model> = asset::Entity::find_by_id(key_bytes.clone())
@@ -273,3 +299,6 @@ pub async fn handle_token_program_account<'a, 'b, 'c>(
     }?;
     Ok(())
 }
+
+#[cfg(test)]
+mod upsert_tests;

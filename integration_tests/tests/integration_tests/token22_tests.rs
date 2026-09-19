@@ -447,3 +447,67 @@ async fn test_t22_pausable_and_scaled_ui_amount() {
         ".token_info.supply" => "[supply]",
     });
 }
+
+// Token-2022 mint with inline metadata and a mint close authority that was never minted (supply 0),
+// then closed. The closed account arrives as a zero-lamport system-owned update.
+#[tokio::test]
+#[serial]
+#[named]
+async fn test_t22_zero_supply_mint_close() {
+    let name = trim_test_name(function_name!());
+    let setup = TestSetup::new_with_options(
+        name.clone(),
+        TestSetupOptions {
+            network: Some(Network::Devnet),
+        },
+    )
+    .await;
+    apply_migrations_and_delete_data(setup.db.clone()).await;
+
+    let mint: Pubkey = Pubkey::try_from("Fz83nWsmXUmUEx6rZBLPdAHQYvdjssXFFPSjQ7HmAvmk").unwrap();
+    index_account(&setup, mint).await;
+
+    let request = api::GetAsset {
+        id: mint.to_string(),
+        ..api::GetAsset::default()
+    };
+    let open = setup.das_api.get_asset(request.clone()).await.unwrap();
+    assert_eq!(open.interface, digital_asset_types::rpc::Interface::FungibleToken);
+    assert!(!open.burnt);
+    insta::assert_json_snapshot!(format!("{name}_open"), open);
+
+    index_account_burn(&setup, mint, get_max_slot()).await;
+
+    let closed = setup.das_api.get_asset(request).await.unwrap();
+    assert!(closed.burnt);
+    insta::assert_json_snapshot!(format!("{name}_closed"), closed);
+}
+
+// A mint update replayed after the closure has been indexed must not clear `burnt`.
+#[tokio::test]
+#[serial]
+#[named]
+async fn test_t22_zero_supply_mint_close_then_replayed_mint_update() {
+    let name = trim_test_name(function_name!());
+    let setup = TestSetup::new_with_options(
+        name.clone(),
+        TestSetupOptions {
+            network: Some(Network::Devnet),
+        },
+    )
+    .await;
+    apply_migrations_and_delete_data(setup.db.clone()).await;
+
+    let mint: Pubkey = Pubkey::try_from("Fz83nWsmXUmUEx6rZBLPdAHQYvdjssXFFPSjQ7HmAvmk").unwrap();
+    index_account(&setup, mint).await;
+    index_account_burn(&setup, mint, get_max_slot()).await;
+    index_account(&setup, mint).await;
+
+    let request = api::GetAsset {
+        id: mint.to_string(),
+        ..api::GetAsset::default()
+    };
+    let response = setup.das_api.get_asset(request).await.unwrap();
+    assert!(response.burnt);
+    assert_eq!(response.interface, digital_asset_types::rpc::Interface::FungibleToken);
+}

@@ -419,8 +419,7 @@ mod tests {
         );
         pin_mut!(stream);
         start_latest_slot_updater(Arc::new(RpcClient::new(
-            std::env::var("RPC_URL").expect("RPC_URL")
-                .to_string(),
+            std::env::var("RPC_URL").expect("RPC_URL").to_string(),
         )))
         .await;
         while let Some(block) = stream.next().await {

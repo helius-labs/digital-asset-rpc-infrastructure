@@ -4,8 +4,8 @@ use digital_asset_types::dao::{asset, asset_data_v2};
 use log::{info, warn};
 use plerkle_serialization::AccountInfo;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr, EntityTrait,
-    QueryFilter, QueryTrait,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr, EntityTrait, QueryFilter,
+    QueryTrait,
 };
 
 pub async fn handle_token_metadata_account<'a, 'c>(
@@ -91,7 +91,10 @@ async fn update_asset_data_with_metadata(
     metadata: &blockbuster::programs::token_extensions::extension::ShadowMetadata,
     slot: i64,
 ) -> Result<(), DbErr> {
-    use digital_asset_types::dao::{offchain_metadata, sea_orm_active_enums::{ChainMutability, Mutability}};
+    use digital_asset_types::dao::{
+        offchain_metadata,
+        sea_orm_active_enums::{ChainMutability, Mutability},
+    };
     use sea_orm::{sea_query::OnConflict, ActiveValue::Set, Statement};
 
     // Serialize metadata to JSON

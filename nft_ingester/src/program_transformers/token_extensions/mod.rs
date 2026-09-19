@@ -9,8 +9,7 @@ use sea_orm::DatabaseConnection;
 use tokio::sync::mpsc::UnboundedSender;
 
 use self::{
-    metadata_account::handle_token_metadata_account,
-    mint::handle_token_extensions_mint_account,
+    metadata_account::handle_token_metadata_account, mint::handle_token_extensions_mint_account,
     token_account::handle_token_extensions_token_account,
 };
 

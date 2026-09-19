@@ -3,9 +3,11 @@ use {
         error::IngesterError,
         program_transformers::{
             asset_upserts::{
-                upsert_assets_metadata_account_columns, upsert_assets_mint_account_columns,
-                upsert_assets_token_account_columns, AssetMetadataAccountColumns,
-                AssetMintAccountColumns, AssetTokenAccountColumns,
+                download_task_warranted, guard_asset_creators_noop, guard_asset_data_v2_noop,
+                guard_authorities_collections_noop, guard_offchain_insert_repair,
+                settle_asset_creators_positions, upsert_assets_metadata_account_columns,
+                upsert_assets_mint_account_columns, upsert_assets_token_account_columns,
+                AssetMetadataAccountColumns, AssetMintAccountColumns, AssetTokenAccountColumns,
             },
             bubblegum::{upsert_creators_info_in_asset_raw, upsert_owner_for_core},
             utils::find_model_with_retry,
@@ -21,7 +23,9 @@ use {
         },
         programs::mpl_core_program::{mpl_core_id, MplCoreAccountData},
     },
+    cadence_macros::statsd_count,
     chrono::Utc,
+    common::metric,
     digital_asset_types::{
         dao::{
             asset, asset_creators, asset_data_v2, offchain_metadata,
@@ -193,6 +197,7 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
             WHERE asset.id = excluded.id",
             asset_query.sql
         );
+    asset_query.sql = guard_authorities_collections_noop(asset_query.sql);
 
     txn.execute(asset_query)
         .await
@@ -240,13 +245,14 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
         reindex: Set(true),
         ..Default::default()
     };
-    let offchain_metadata_query = offchain_metadata::Entity::insert(offchain_metadata_model)
+    let mut offchain_metadata_query = offchain_metadata::Entity::insert(offchain_metadata_model)
         .on_conflict(
             OnConflict::columns([offchain_metadata::Column::MetadataUrl])
-                .do_nothing()
+                .update_columns([offchain_metadata::Column::Reindex])
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
+    offchain_metadata_query.sql = guard_offchain_insert_repair(offchain_metadata_query.sql);
 
     let asset_data_v2_model = asset_data_v2::ActiveModel {
         metadata_url: Set(uri.clone()),
@@ -273,16 +279,15 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
-    asset_data_v2_query.sql = format!(
-        "{} WHERE excluded.slot_updated >= asset_data_v2.slot_updated",
-        asset_data_v2_query.sql
-    );
+    asset_data_v2_query.sql = guard_asset_data_v2_noop(asset_data_v2_query.sql);
 
     let txn = conn.begin().await?;
-    txn.execute(offchain_metadata_query)
+    let offchain_res = txn
+        .execute(offchain_metadata_query)
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-    txn.execute(asset_data_v2_query)
+    let asset_data_res = txn
+        .execute(asset_data_v2_query)
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
@@ -499,6 +504,7 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
         })
         .collect::<Vec<_>>();
 
+    let creator_count = creators.len() as i16;
     if !creators.is_empty() {
         let mut query = asset_creators::Entity::insert_many(creators)
             .on_conflict(
@@ -516,11 +522,14 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
                 .to_owned(),
             )
             .build(DbBackend::Postgres);
-        query.sql = format!(
-                    "{} WHERE excluded.slot_updated >= asset_creators.slot_updated OR asset_creators.slot_updated is NULL",
-                    query.sql
-                );
+        query.sql = guard_asset_creators_noop(query.sql);
         txn.execute(query)
+            .await
+            .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
+        // The guarded upsert may skip unchanged positions and never removes
+        // dropped ones; settle both so the read path's max-slot staleness
+        // filter sees exactly the incoming creator set.
+        settle_asset_creators_positions(&txn, id_vec.clone(), slot_i, creator_count)
             .await
             .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
 
@@ -549,6 +558,15 @@ pub async fn save_v1_asset<'a, T: ConnectionTrait + TransactionTrait>(
         return Ok(None);
     }
 
+    // An account touch that neither introduced a new URI nor changed stored
+    // metadata is no evidence the off-chain document changed — skip the task.
+    if !download_task_warranted(offchain_res.rows_affected(), asset_data_res.rows_affected()) {
+        metric! {
+            statsd_count!("ingester.bgtask.noop_metadata_skip", 1);
+        }
+        return Ok(None);
+    }
+
     // Otherwise return with info for background downloading.
     let mut task = DownloadMetadata {
         asset_data_id: id_vec.clone(),
@@ -574,9 +592,7 @@ fn build_mpl_core_group_values(
         .plugins
         .get(&PluginType::Groups)
         .and_then(|plugin| match &plugin.data {
-            Plugin::Groups(groups) => {
-                Some(groups.groups.iter().map(ToString::to_string).collect())
-            }
+            Plugin::Groups(groups) => Some(groups.groups.iter().map(ToString::to_string).collect()),
             _ => None,
         })
         .unwrap_or_default()

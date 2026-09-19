@@ -20,12 +20,10 @@ use solana_client::{
 };
 
 use rayon::iter::ParallelIterator;
-use solana_program::pubkey;
 use solana_commitment_config::CommitmentConfig;
-use solana_sdk::{
-    account::Account, pubkey::Pubkey,
-    transaction::VersionedTransaction,
-};
+use solana_message::VersionedMessage;
+use solana_program::pubkey;
+use solana_sdk::{account::Account, pubkey::Pubkey, transaction::VersionedTransaction};
 use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedTransactionWithStatusMeta, TransactionDetails,
     UiConfirmedBlock, UiTransactionEncoding, UiTransactionStatusMeta,
@@ -39,6 +37,13 @@ use crate::{
 };
 
 pub const BUBBLEGUM_PUBKEY: Pubkey = pubkey!("BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY");
+pub const TOKEN_METADATA_PUBKEY: Pubkey = pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+pub const MPL_CORE_PUBKEY: Pubkey = pubkey!("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
+const COMPUTE_BUDGET_PUBKEY: Pubkey = pubkey!("ComputeBudget111111111111111111111111111111");
+/// Metaplex fee-collection instructions, which sweep excess lamports out of the
+/// accounts they touch and leave the serialized data untouched.
+const FEE_COLLECTION_INSTRUCTIONS: [(Pubkey, u8); 2] =
+    [(TOKEN_METADATA_PUBKEY, 54), (MPL_CORE_PUBKEY, 19)];
 pub const DAS_ACCOUNTS: [Pubkey; 6] = [
     pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
     pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
@@ -313,6 +318,12 @@ fn parse_modified_accounts_from_versioned_transaction(
     versioned_transaction: VersionedTransaction,
     meta: UiTransactionStatusMeta,
 ) -> Vec<Pubkey> {
+    if is_fee_collection_only(&versioned_transaction.message) {
+        metric! {
+            statsd_count!("rpc_fee_collection_transaction_skipped", 1);
+        }
+        return Vec::new();
+    }
     let mut accounts: Vec<Pubkey> = versioned_transaction
         .message
         .static_account_keys()
@@ -335,6 +346,31 @@ fn parse_modified_accounts_from_versioned_transaction(
         }
     }
     accounts
+}
+
+/// A transaction made only of Metaplex fee-collection and ComputeBudget
+/// instructions changes lamports but no account state that DAS indexes.
+fn is_fee_collection_only(message: &VersionedMessage) -> bool {
+    let keys = message.static_account_keys();
+    let mut saw_collection = false;
+    for instruction in message.instructions() {
+        let Some(program) = keys.get(instruction.program_id_index as usize) else {
+            return false;
+        };
+        if *program == COMPUTE_BUDGET_PUBKEY {
+            continue;
+        }
+        let is_collection = FEE_COLLECTION_INSTRUCTIONS
+            .iter()
+            .any(|(id, discriminator)| {
+                program == id && instruction.data.first() == Some(discriminator)
+            });
+        if !is_collection {
+            return false;
+        }
+        saw_collection = true;
+    }
+    saw_collection
 }
 
 struct AccountMetadata {
@@ -559,7 +595,7 @@ pub fn is_bubblegum_transaction(tx: EncodedTransactionWithStatusMeta) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use solana_message::{v1, MessageHeader, VersionedMessage};
+    use solana_message::{compiled_instruction::CompiledInstruction, legacy, v1, MessageHeader};
     use solana_sdk::signature::Signature;
     use solana_transaction_status::{EncodedTransaction, TransactionBinaryEncoding};
 
@@ -595,6 +631,89 @@ mod tests {
         assert!(matches!(decoded.message, VersionedMessage::V1(_)));
         assert_eq!(decoded.message.static_account_keys(), &[payer, program]);
         assert!(decoded.message.address_table_lookups().is_none());
+    }
+
+    fn legacy_message(keys: Vec<Pubkey>, instructions: Vec<(u8, Vec<u8>)>) -> VersionedMessage {
+        let instructions = instructions
+            .into_iter()
+            .map(|(program_id_index, data)| CompiledInstruction {
+                program_id_index,
+                accounts: vec![0, 1, 2],
+                data,
+            })
+            .collect();
+        VersionedMessage::Legacy(legacy::Message {
+            header: MessageHeader {
+                num_required_signatures: 1,
+                num_readonly_signed_accounts: 0,
+                num_readonly_unsigned_accounts: 2,
+            },
+            account_keys: keys,
+            recent_blockhash: Default::default(),
+            instructions,
+        })
+    }
+
+    const TOKEN_METADATA_COLLECT: u8 = 54;
+    const MPL_CORE_COLLECT: u8 = 19;
+
+    #[test]
+    fn collect_only_transaction_is_skipped() {
+        let payer = Pubkey::new_unique();
+        let swept = Pubkey::new_unique();
+        let keys = vec![
+            payer,
+            swept,
+            TOKEN_METADATA_PUBKEY,
+            COMPUTE_BUDGET_PUBKEY,
+            MPL_CORE_PUBKEY,
+        ];
+
+        let collect_only = legacy_message(
+            keys.clone(),
+            vec![
+                (3, vec![2, 0, 0, 0, 0]),
+                (2, vec![TOKEN_METADATA_COLLECT]),
+                (2, vec![TOKEN_METADATA_COLLECT]),
+            ],
+        );
+        assert!(is_fee_collection_only(&collect_only));
+
+        // The sweep moved to MPL Core on Sep 17 2026; both programs must match.
+        let core_collect_only = legacy_message(keys.clone(), vec![(4, vec![MPL_CORE_COLLECT])]);
+        assert!(is_fee_collection_only(&core_collect_only));
+
+        let mixed_programs = legacy_message(
+            keys.clone(),
+            vec![
+                (2, vec![TOKEN_METADATA_COLLECT]),
+                (4, vec![MPL_CORE_COLLECT]),
+            ],
+        );
+        assert!(is_fee_collection_only(&mixed_programs));
+
+        // A discriminator that belongs to the other program must not match.
+        let core_with_metadata_discriminator =
+            legacy_message(keys.clone(), vec![(4, vec![TOKEN_METADATA_COLLECT])]);
+        assert!(!is_fee_collection_only(&core_with_metadata_discriminator));
+
+        let collect_and_update = legacy_message(
+            keys.clone(),
+            vec![(2, vec![TOKEN_METADATA_COLLECT]), (2, vec![15])],
+        );
+        assert!(!is_fee_collection_only(&collect_and_update));
+
+        let core_collect_and_update = legacy_message(
+            keys.clone(),
+            vec![(4, vec![MPL_CORE_COLLECT]), (4, vec![14])],
+        );
+        assert!(!is_fee_collection_only(&core_collect_and_update));
+
+        let compute_budget_only = legacy_message(keys.clone(), vec![(3, vec![2, 0, 0, 0, 0])]);
+        assert!(!is_fee_collection_only(&compute_budget_only));
+
+        let empty_data = legacy_message(keys, vec![(2, vec![])]);
+        assert!(!is_fee_collection_only(&empty_data));
     }
 
     #[test]

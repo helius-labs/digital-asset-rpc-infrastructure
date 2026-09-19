@@ -13,12 +13,13 @@ use reqwest::{Client, ClientBuilder};
 use sea_orm::{sea_query::OnConflict, *};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt::{Display, Formatter},
     time::Duration,
 };
 use url::Url;
 
-const TASK_NAME: &str = "DownloadMetadata";
+pub(crate) const TASK_NAME: &str = "DownloadMetadata";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadMetadata {
@@ -74,6 +75,28 @@ const PINATA_REGEX_STR: &str = r"https?://(?:[a-zA-Z0-9-]+\.)?pinata\.cloud/(.*)
 const CLOUDFLARE_IPFS_REGEX_STR: &str = r"https?://cloudflare-ipfs\.com/(.*)";
 const CLOUDFLARE_IPFS_REGEX_STR_2: &str = r"https?://cf-ipfs\.com/(.*)";
 const IPFS_GATEWAY_REGEX_STR: &str = r"^https?://[^/]+/(ipfs/.+)$";
+
+// An arweave transaction id is a 32-byte content address rendered as 43 base64url
+// characters. The bytes served for one are fixed for the life of the network, as is
+// any manifest path or query string beneath it.
+const IMMUTABLE_ARWEAVE_REGEX_STR: &str =
+    r"^https?://(?:[a-zA-Z0-9-]+\.)?arweave\.net(?::\d+)?/[A-Za-z0-9_-]{43}(?:[/?#].*)?$";
+
+// An IPFS CID is a hash of the content, so any gateway serving one must serve the same
+// bytes. CIDv0 is 46 base58 characters starting `Qm`; CIDv1 is base32 starting `ba`.
+// A path below a CID resolves inside that CID's DAG and is equally fixed.
+// `/ipns/` is deliberately excluded: IPNS names are repointable.
+const IMMUTABLE_IPFS_PATH_REGEX_STR: &str = concat!(
+    r"^(?:ipfs://|https?://[^/]+/ipfs/)",
+    r"(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|ba[a-z2-7]{57,})",
+    r"(?:[/?#].*)?$"
+);
+// Subdomain gateways put the CIDv1 in the host: https://<cid>.ipfs.<gateway>/0.json
+const IMMUTABLE_IPFS_SUBDOMAIN_REGEX_STR: &str =
+    r"^https?://ba[a-z2-7]{57,}\.ipfs\.[^/]+(?:[/?#].*)?$";
+// A CID with an optional path and no scheme or gateway: `Qm.../0.json`.
+const BARE_IPFS_CID_REGEX_STR: &str =
+    r"^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|ba[a-z2-7]{57,})(?:/[^\s]*)?$";
 
 async fn parse_json_response(
     response: reqwest::Response,
@@ -214,8 +237,18 @@ impl DownloadMetadataTask {
         for (gateway, regex, client, use_raw) in [
             (ipfs_gw.clone(), &*IPFS_REGEX, &ipfs_client, false),
             (ipfs_gw.clone(), &*PINATA_REGEX, &ipfs_client, false),
-            (ipfs_gw.clone(), &*CLOUDFLARE_IPFS_REGEX, &ipfs_client, false),
-            (ipfs_gw.clone(), &*CLOUDFLARE_IPFS_REGEX_2, &ipfs_client, false),
+            (
+                ipfs_gw.clone(),
+                &*CLOUDFLARE_IPFS_REGEX,
+                &ipfs_client,
+                false,
+            ),
+            (
+                ipfs_gw.clone(),
+                &*CLOUDFLARE_IPFS_REGEX_2,
+                &ipfs_client,
+                false,
+            ),
             (ipfs_gw, &*IPFS_GATEWAY_REGEX, &ipfs_client, false),
             (arweave_gateway, &*ARWEAVE_REGEX, &plain_client, true),
         ] {
@@ -253,9 +286,15 @@ impl DownloadMetadataTask {
                         _ => {
                             let status = response.status();
                             if use_raw {
-                                error!("Gateway failed: {} returned {} (original: {})", new_uri, status, uri);
+                                error!(
+                                    "Gateway failed: {} returned {} (original: {})",
+                                    new_uri, status, uri
+                                );
                             } else {
-                                warn!("Gateway failed: {} returned {} (original: {})", new_uri, status, uri);
+                                warn!(
+                                    "Gateway failed: {} returned {} (original: {})",
+                                    new_uri, status, uri
+                                );
                             }
                             metric! {
                                 statsd_count!("ingester.bgtask.gateway", 1, "found" => "false", "gateway" => g.as_str(), "status" => status.as_str());
@@ -277,10 +316,7 @@ impl DownloadMetadataTask {
                     uri, status_code, gw_uri, gw_status,
                 );
             }
-            Err(IngesterError::HttpError {
-                status_code,
-                uri,
-            })
+            Err(IngesterError::HttpError { status_code, uri })
         } else {
             parse_json_response(response).await
         }
@@ -335,10 +371,11 @@ impl BgTask for DownloadMetadataTask {
             bs58::encode(download_metadata.asset_data_id.clone()).into_string()
         );
 
-        let meta_url = Url::parse(&download_metadata.uri);
+        let fetch_uri = normalize_metadata_uri(&download_metadata.uri);
+        let meta_url = Url::parse(&fetch_uri);
         let body = match meta_url {
             Ok(_) => DownloadMetadataTask::request_metadata(
-                download_metadata.uri.clone(),
+                fetch_uri.into_owned(),
                 self.timeout.unwrap_or(Duration::from_millis(3000)),
                 ipfs_gateway,
                 ipfs_gateway_token,
@@ -406,12 +443,112 @@ impl Display for DownloadMetadata {
     }
 }
 
+/// Rewrites a scheme-less IPFS CID to an `ipfs://` URI. Every other URI is returned as is.
+pub(crate) fn normalize_metadata_uri(uri: &str) -> Cow<'_, str> {
+    lazy_static! {
+        static ref BARE_IPFS_CID_REGEX: Regex = Regex::new(BARE_IPFS_CID_REGEX_STR).unwrap();
+    }
+    let uri = uri.trim();
+    if BARE_IPFS_CID_REGEX.is_match(uri) {
+        Cow::Owned(format!("ipfs://{}", uri))
+    } else {
+        Cow::Borrowed(uri)
+    }
+}
+
+/// True when the URI is a content address, so the document behind it can never change.
+pub(crate) fn is_content_addressed(uri: &str) -> bool {
+    lazy_static! {
+        static ref IMMUTABLE_ARWEAVE_REGEX: Regex =
+            Regex::new(IMMUTABLE_ARWEAVE_REGEX_STR).unwrap();
+        static ref IMMUTABLE_IPFS_PATH_REGEX: Regex =
+            Regex::new(IMMUTABLE_IPFS_PATH_REGEX_STR).unwrap();
+        static ref IMMUTABLE_IPFS_SUBDOMAIN_REGEX: Regex =
+            Regex::new(IMMUTABLE_IPFS_SUBDOMAIN_REGEX_STR).unwrap();
+    }
+    let uri = normalize_metadata_uri(uri);
+    IMMUTABLE_ARWEAVE_REGEX.is_match(&uri)
+        || IMMUTABLE_IPFS_PATH_REGEX.is_match(&uri)
+        || IMMUTABLE_IPFS_SUBDOMAIN_REGEX.is_match(&uri)
+}
+
+/// True when `metadata` holds a fetched document rather than a placeholder.
+/// The placeholders are the `processing` sentinel written at mint, the
+/// `Invalid Uri` string, and the permanent-failure record.
+pub(crate) fn holds_fetched_document(metadata: &serde_json::Value) -> bool {
+    match metadata.as_object() {
+        Some(map) => map.get("error").and_then(|e| e.as_str()) != Some("permanent_failure"),
+        None => false,
+    }
+}
+
+/// How long a permanent-failure record suppresses refetching. One probe per URI
+/// per horizon replaces one probe per touch, and a misclassification heals at
+/// the next probe.
+pub(crate) const PERMANENT_FAILURE_RETRY_HOURS: i64 = 24;
+
+/// True when `metadata` is a permanent-failure record.
+pub(crate) fn is_permanent_failure(metadata: &serde_json::Value) -> bool {
+    metadata
+        .as_object()
+        .and_then(|map| map.get("error"))
+        .and_then(|e| e.as_str())
+        == Some("permanent_failure")
+}
+
+/// HTTP statuses that mean the document is gone at this URI, as opposed to rate
+/// limiting (429), bot blocking (403), or upstream faults (5xx).
+///
+/// 404 is excluded. A content gateway answers 404 when it has not pinned the
+/// content, not when the content is gone, so the same URI often resolves from
+/// another gateway or on a later attempt. Treating that as permanent would blank
+/// an asset's metadata for a full horizon on the word of one gateway.
+pub(crate) fn is_permanent_http_status(status_code: &str) -> bool {
+    matches!(status_code, "402" | "410" | "451")
+}
+
+/// True while a permanent-failure record is younger than the retry horizon.
+pub(crate) fn permanent_failure_is_fresh(model: &offchain_metadata::Model) -> bool {
+    if !is_permanent_failure(&model.metadata) {
+        return false;
+    }
+    match model.updated_at {
+        Some(updated_at) => {
+            let age = chrono::Utc::now().naive_utc() - updated_at.naive_utc();
+            age < chrono::Duration::hours(PERMANENT_FAILURE_RETRY_HOURS)
+        }
+        None => false,
+    }
+}
+
 fn should_reindex(offchain_model: Option<offchain_metadata::Model>, reindex_interval: i64) -> bool {
     match offchain_model {
         None => true,
         Some(model) => {
             if model.reindex {
                 return true;
+            }
+
+            // A URI that most recently answered with a gone/unpurchasable status is
+            // probed once per horizon instead of once per touch.
+            if permanent_failure_is_fresh(&model) {
+                metric! {
+                    statsd_count!("ingester.bgtask.permafail_skip", 1);
+                }
+                return false;
+            }
+
+            // A content address that already yielded its document has nothing left to
+            // re-read. Editing an NFT repoints its on-chain uri at a new id, which
+            // reaches us as a separate row and is fetched on its own.
+            if model.updated_at.is_some()
+                && is_content_addressed(&model.metadata_url)
+                && holds_fetched_document(&model.metadata)
+            {
+                metric! {
+                    statsd_count!("ingester.bgtask.immutable_skip", 1);
+                }
+                return false;
             }
             // If the model has been updated within the "grace period", skip reindexing.
             if let Some(updated_at) = model.updated_at {
@@ -450,6 +587,259 @@ mod tests {
         assert_eq!(new_url, "https://test.infura-ipfs.io/ipfs/Qmcm5RD1AqFinZcgZRP8ecZTj7FBnp8oUpKDc1A4dejfGw/2150.json");
     }
 
+    #[test]
+    fn bare_cid_is_rewritten_to_ipfs_scheme() {
+        assert_eq!(
+            normalize_metadata_uri("QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk"),
+            "ipfs://QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk"
+        );
+        assert_eq!(
+            normalize_metadata_uri("  QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk/0.json "),
+            "ipfs://QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk/0.json"
+        );
+        assert_eq!(
+            normalize_metadata_uri(
+                "bafybeie5ctfikksdc4gvopphghafyensonn6lwdahyqwozacnq5fvf3axi/6598.json"
+            ),
+            "ipfs://bafybeie5ctfikksdc4gvopphghafyensonn6lwdahyqwozacnq5fvf3axi/6598.json"
+        );
+        assert!(is_content_addressed(
+            "QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk"
+        ));
+    }
+
+    #[test]
+    fn non_cid_uris_are_left_unchanged() {
+        for uri in [
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            "ipfs://QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk",
+            "https://ipfs.io/ipfs/QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkAk",
+            // 45 characters, one short of a CIDv0.
+            "QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdkA",
+            // Base58 excludes 0, O, I and l.
+            "QmUzGdu1Zbm3rbbLhh1cJowxq23WAxqd8CwjubLzVPdk0O",
+            "./metadata.json",
+            "/api/jsonBlob/019b4e87-9c73-798b-8229-60923d3ea092",
+            "",
+        ] {
+            assert_eq!(normalize_metadata_uri(uri), uri.trim(), "changed: {}", uri);
+        }
+    }
+
+    #[test]
+    fn content_addressed_accepts_arweave_transaction_ids() {
+        for uri in [
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            "http://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            "https://www.arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY?ext=json",
+            "https://arweave.net:443/txHV2iTW5vChUmz8akM7WesGXJf1AYA4UGFeK7Duvn0/rock_1274.json",
+            "  https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY  ",
+        ] {
+            assert!(is_content_addressed(uri), "expected immutable: {}", uri);
+        }
+    }
+
+    #[test]
+    fn content_addressed_rejects_malformed_and_mutable_urls() {
+        for uri in [
+            // Malformed ids observed in production rows.
+            "https://arweave.net/\"AC-3jbsDLNn5Y9BgyJsYv1LKyQv_NGJ8UKmai-qaVJM",
+            "https://arweave.net/#NAME?",
+            "https://arweave.net/$6tJx9B9DDJ8WpSreD6VJ2Esm26y9_yxX2dku1HgoJPU",
+            // 42 characters, one short of a transaction id.
+            "https://arweave.net/-jNr8TPmaVKthensa0sOlwZsxzbJDD7H3zXQlB5kCC",
+            // Hosts that can serve different bytes at a fixed path.
+            "https://storage.googleapis.com/fractal-launchpad-public/1.json",
+            "https://api.stepn.com/run/nftjson/103/1",
+            "https://nftstorage.link/ipfs/bafybeib3wg/157.json",
+            // Host that merely starts with the gateway name.
+            "https://arweave.net.example.com/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            // Transaction id embedded in someone else's query string.
+            "https://example.com/x?u=https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            // 44 characters, one over a transaction id.
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pYX",
+        ] {
+            assert!(!is_content_addressed(uri), "expected mutable: {}", uri);
+        }
+    }
+
+    #[test]
+    fn content_addressed_accepts_ipfs_cids() {
+        for uri in [
+            // Real shapes taken from production task rows.
+            "https://ipfs.io/ipfs/QmPxpwQPq9GhzWUnGGfUXf3HPZZ7bHgyQDAfniFKYK5i8u",
+            "https://nftstorage.link/ipfs/bafkreibuumx4y6ag3df5ztgizddvy4nlbmargm24hcmuirvl3ob4t62ycq",
+            "https://nftstorage.link/ipfs/bafybeihwsoh2tk3zqhci7hbvk7vz5muwi7ufdt6nr7ey3m62hdidk6fc74/51.json",
+            "https://gateway.pinit.io/ipfs/QmSvJoWqtfaH8q6bRwLdm1tgtGbWKji8UgsRcL67p5d9zL/596.json",
+            "https://bafybeieaxznycgxwu3vj2zfb2jf3ka5vyhf3lzzf6ttinbsndfhgvrcyia.ipfs.nftstorage.link/0.json",
+            "ipfs://QmPxpwQPq9GhzWUnGGfUXf3HPZZ7bHgyQDAfniFKYK5i8u",
+            "ipfs://bafybeidc5ovozegzithm6ab35zkeiq3gomc6l4bw6oik35uxr5hykpkfa4/1578.json",
+        ] {
+            assert!(is_content_addressed(uri), "expected immutable: {}", uri);
+        }
+    }
+
+    #[test]
+    fn content_addressed_rejects_ipns_and_malformed_cids() {
+        for uri in [
+            // IPNS names are repointable, so they must keep refreshing.
+            "https://ipfs.io/ipns/k51qzi5uqu5dkkciu33khkzbcmxtyhn376i1e83tya8kuy7z9euedzyr5nhoew",
+            "https://ipfs.io/ipns/example.com/metadata.json",
+            // Truncated CIDv0, 45 characters rather than 46.
+            "https://ipfs.io/ipfs/QmPxpwQPq9GhzWUnGGfUXf3HPZZ7bHgyQDAfniFKYK5i8",
+            // Not a CID at all.
+            "https://ipfs.io/ipfs/metadata.json",
+            // CID-looking segment on a host that is not a gateway path.
+            "https://example.com/QmPxpwQPq9GhzWUnGGfUXf3HPZZ7bHgyQDAfniFKYK5i8u",
+        ] {
+            assert!(!is_content_addressed(uri), "expected mutable: {}", uri);
+        }
+    }
+
+    #[test]
+    fn skips_immutable_ipfs_uri_we_already_fetched() {
+        let m = model(
+            "https://ipfs.io/ipfs/QmPxpwQPq9GhzWUnGGfUXf3HPZZ7bHgyQDAfniFKYK5i8u",
+            serde_json::json!({"name": "Some NFT"}),
+            false,
+        );
+        assert!(!should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn still_fetches_ipns_uri() {
+        let m = model(
+            "https://ipfs.io/ipns/example.com/metadata.json",
+            serde_json::json!({"name": "Some NFT"}),
+            false,
+        );
+        assert!(should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn permanent_http_statuses_are_gone_or_unpurchasable_only() {
+        for code in ["402", "410", "451"] {
+            assert!(
+                is_permanent_http_status(code),
+                "expected permanent: {}",
+                code
+            );
+        }
+        // 404 is retryable on purpose: a gateway miss is not proof the document is gone.
+        for code in ["401", "403", "404", "429", "500", "502", "530"] {
+            assert!(
+                !is_permanent_http_status(code),
+                "expected retryable: {}",
+                code
+            );
+        }
+    }
+
+    fn permafail_model(updated_hours_ago: i64, reindex: bool) -> offchain_metadata::Model {
+        let mut m = model(
+            "https://api.stepn.com/run/nftjson/103/1",
+            serde_json::json!({"error": "permanent_failure", "msg": "HttpError 410", "code": "410"}),
+            reindex,
+        );
+        m.updated_at =
+            Some((chrono::Utc::now() - chrono::Duration::hours(updated_hours_ago)).into());
+        m
+    }
+
+    #[test]
+    fn fresh_permanent_failure_suppresses_reindex() {
+        assert!(!should_reindex(Some(permafail_model(1, false)), 60));
+    }
+
+    #[test]
+    fn stale_permanent_failure_probes_again() {
+        assert!(should_reindex(
+            Some(permafail_model(PERMANENT_FAILURE_RETRY_HOURS + 1, false)),
+            60
+        ));
+    }
+
+    #[test]
+    fn reindex_flag_overrides_permanent_failure() {
+        assert!(should_reindex(Some(permafail_model(1, true)), 60));
+    }
+
+    #[test]
+    fn fetched_document_distinguishes_placeholders() {
+        assert!(holds_fetched_document(
+            &serde_json::json!({"name": "Some NFT"})
+        ));
+        assert!(!holds_fetched_document(&serde_json::json!("processing")));
+        assert!(!holds_fetched_document(&serde_json::json!("Invalid Uri")));
+        assert!(!holds_fetched_document(
+            &serde_json::json!({"error": "permanent_failure", "msg": "bad uri"})
+        ));
+    }
+
+    fn model(url: &str, metadata: serde_json::Value, reindex: bool) -> offchain_metadata::Model {
+        let long_ago = chrono::Utc::now() - chrono::Duration::days(400);
+        offchain_metadata::Model {
+            id: 1,
+            metadata_url: url.to_string(),
+            mutability: digital_asset_types::dao::sea_orm_active_enums::Mutability::Mutable,
+            metadata,
+            created_at: long_ago.into(),
+            updated_at: Some(long_ago.into()),
+            reindex,
+        }
+    }
+
+    #[test]
+    fn skips_immutable_uri_we_already_fetched() {
+        let m = model(
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            serde_json::json!({"name": "Some NFT"}),
+            false,
+        );
+        assert!(!should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn reindex_flag_overrides_immutability() {
+        let m = model(
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            serde_json::json!({"name": "Some NFT"}),
+            true,
+        );
+        assert!(should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn still_retries_immutable_uri_we_never_fetched() {
+        let m = model(
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            serde_json::json!("processing"),
+            false,
+        );
+        assert!(should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn still_fetches_immutable_uri_with_no_updated_at() {
+        let mut m = model(
+            "https://arweave.net/OIX7PqIWsN4JIx5TLgRt4yF7DvUQOX-gtYDmIrjR-pY",
+            serde_json::json!({"name": "Some NFT"}),
+            false,
+        );
+        m.updated_at = None;
+        assert!(should_reindex(Some(m), 60));
+    }
+
+    #[test]
+    fn mutable_host_still_refreshes_when_stale() {
+        let m = model(
+            "https://storage.googleapis.com/fractal-launchpad-public/1.json",
+            serde_json::json!({"name": "Some NFT"}),
+            false,
+        );
+        assert!(should_reindex(Some(m), 60));
+    }
+
     #[tokio::test]
     #[ignore]
     async fn retries_when_timeout() {
@@ -465,5 +855,4 @@ mod tests {
 
         assert!(result.is_ok());
     }
-
 }

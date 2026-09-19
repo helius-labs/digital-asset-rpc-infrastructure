@@ -1,4 +1,4 @@
-FROM rust:1.96-bullseye  AS builder
+FROM rust:1.96-bookworm  AS builder
 RUN apt-get update -y && \
     apt-get install -y build-essential make git
 COPY rust-services/das-system/digital_asset_types /das-system/digital_asset_types
@@ -7,7 +7,7 @@ WORKDIR /das-system/das_api
 # # Build application
 RUN cargo build --release
 
-FROM rust:1.96-slim-bullseye
+FROM rust:1.96-slim-bookworm
 ARG APP=/usr/src/app
 RUN apt update \
     && apt install -y curl ca-certificates tzdata \

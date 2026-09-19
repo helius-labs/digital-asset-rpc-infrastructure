@@ -286,7 +286,7 @@ mod tests {
 
         let tokens = vec![
             token_with_null_byte(), // Should be skipped
-            valid_sol_token(),       // Should be inserted
+            valid_sol_token(),      // Should be inserted
         ];
 
         let result = PriceTaskManager::update_token_prices(tokens, Arc::new(db)).await;
@@ -301,7 +301,7 @@ mod tests {
 
         let tokens = vec![
             token_with_control_chars(), // Control chars are allowed, should be inserted
-            valid_usdc_token(),          // Should be inserted
+            valid_usdc_token(),         // Should be inserted
         ];
 
         let result = PriceTaskManager::update_token_prices(tokens, Arc::new(db)).await;
@@ -314,10 +314,7 @@ mod tests {
     async fn test_update_token_prices_handles_all_valid_tokens() {
         let db = create_mock_db(2);
 
-        let tokens = vec![
-            valid_sol_token(),
-            valid_usdc_token(),
-        ];
+        let tokens = vec![valid_sol_token(), valid_usdc_token()];
 
         let result = PriceTaskManager::update_token_prices(tokens, Arc::new(db)).await;
 

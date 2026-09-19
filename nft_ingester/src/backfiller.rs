@@ -11,6 +11,9 @@ use log::{debug, error, info};
 use plerkle_messenger::{Messenger, TRANSACTION_STREAM};
 use plerkle_serialization::serializer::seralize_encoded_transaction_with_status;
 
+use mpl_account_compression::state::{
+    merkle_tree_get_size, ConcurrentMerkleTreeHeader, CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1,
+};
 use sea_orm::{
     entity::*, query::*, sea_query::Expr, DatabaseConnection, DbBackend, DbErr, FromQueryResult,
     SqlxPostgresConnector,
@@ -21,9 +24,6 @@ use solana_client::{
     rpc_client::GetConfirmedSignaturesForAddress2Config,
     rpc_config::{RpcAccountInfoConfig, RpcBlockConfig, RpcProgramAccountsConfig},
     rpc_filter::{Memcmp, RpcFilterType},
-};
-use mpl_account_compression::state::{
-    merkle_tree_get_size, ConcurrentMerkleTreeHeader, CONCURRENT_MERKLE_TREE_HEADER_SIZE_V1,
 };
 use solana_commitment_config::{CommitmentConfig, CommitmentLevel};
 use solana_sdk::{account::Account, pubkey::Pubkey, signature::Signature, slot_history::Slot};
@@ -698,9 +698,8 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
             .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?
             .into_iter()
             .map(|(pubkey, ui_account)| {
-                let err = || {
-                    IngesterError::RpcGetDataError(format!("Failed to decode account {pubkey}"))
-                };
+                let err =
+                    || IngesterError::RpcGetDataError(format!("Failed to decode account {pubkey}"));
                 let account = Account {
                     lamports: ui_account.lamports,
                     data: ui_account.data.decode().ok_or_else(err)?,
@@ -721,7 +720,11 @@ impl<'a, T: Messenger> Backfiller<'a, T> {
                 BorshDeserialize::deserialize(&mut &header_bytes[..])
                     .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;
 
-            let auth = Pubkey::find_program_address(&[pubkey.as_ref()], &solana_sdk::pubkey::Pubkey::new_from_array(mpl_bubblegum::ID.to_bytes())).0;
+            let auth = Pubkey::find_program_address(
+                &[pubkey.as_ref()],
+                &solana_sdk::pubkey::Pubkey::new_from_array(mpl_bubblegum::ID.to_bytes()),
+            )
+            .0;
 
             let merkle_tree_size = merkle_tree_get_size(&header)
                 .map_err(|e| IngesterError::RpcGetDataError(e.to_string()))?;

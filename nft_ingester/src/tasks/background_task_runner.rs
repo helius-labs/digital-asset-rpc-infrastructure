@@ -15,8 +15,8 @@ use plerkle_messenger::MessengerConfig;
 use regex::Regex;
 use sea_orm::sea_query::OnConflict;
 use sea_orm::{
-    sea_query::Expr, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait,
-    QueryFilter, QueryTrait, Set, SqlxPostgresConnector,
+    sea_query::Expr, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbBackend,
+    EntityTrait, QueryFilter, QueryTrait, Set, SqlxPostgresConnector,
 };
 use sqlx::{Pool, Postgres};
 use std::{collections::HashMap, sync::Arc};
@@ -239,6 +239,12 @@ impl BackgroundTaskRunner {
                             statsd_count!("ingester.bgtask.network_error", 1, "type" => task_name);
                         }
                         warn!("Task failed due to network error: {}", msg);
+                        if task_name == "DownloadMetadata" {
+                            if let Some(ref uri) = task_uri {
+                                BackgroundTaskRunner::mark_offchain_transient_failure(db, uri)
+                                    .await;
+                            }
+                        }
                     }
                     IngesterError::HttpError {
                         ref status_code,
@@ -258,6 +264,37 @@ impl BackgroundTaskRunner {
                                 "root_domain" => root_domain.as_str());
                         }
                         warn!("Task failed due to HTTP error: {}", e);
+
+                        // A gone/unpurchasable status earns a permanent-failure record so
+                        // the URI is probed once per horizon instead of once per touch.
+                        // Rate limiting and bot blocking stay retryable.
+                        if task_name == "DownloadMetadata" {
+                            if let Some(ref uri) = task_uri {
+                                if crate::tasks::common::is_permanent_http_status(status_code) {
+                                    let err_msg = e.to_string();
+                                    if let Err(db_err) =
+                                        BackgroundTaskRunner::mark_offchain_permanent_failure(
+                                            db,
+                                            uri,
+                                            &err_msg,
+                                            Some(status_code),
+                                        )
+                                        .await
+                                    {
+                                        warn!(
+                                            "Failed to mark offchain permanent failure for {}: {}",
+                                            uri, db_err
+                                        );
+                                    }
+                                } else {
+                                    // Retryable statuses (429, 403, 5xx) stamp the
+                                    // probe time so touch-driven re-arms respect the
+                                    // retry horizon instead of retrying per touch.
+                                    BackgroundTaskRunner::mark_offchain_transient_failure(db, uri)
+                                        .await;
+                                }
+                            }
+                        }
                     }
                     IngesterError::UnrecoverableTaskError(_) => {
                         metric! {
@@ -273,7 +310,7 @@ impl BackgroundTaskRunner {
                                 let err_msg = e.to_string();
                                 if let Err(db_err) =
                                     BackgroundTaskRunner::mark_offchain_permanent_failure(
-                                        db, uri, &err_msg,
+                                        db, uri, &err_msg, None,
                                     )
                                     .await
                                 {
@@ -319,6 +356,38 @@ impl BackgroundTaskRunner {
         db.execute(query).await.map(|_| ()).map_err(|e| e.into())
     }
 
+    /// Stamps the probe time on a still-unfetched row after a retryable
+    /// failure (timeout, 429, 5xx). The document and reindex flag are left
+    /// alone; the timestamp only feeds the touch-driven re-arm horizon in
+    /// guard_offchain_insert_repair, bounding dead-link probes to one per
+    /// horizon instead of one per account touch.
+    ///
+    /// A row already stamped within the last hour is left alone. Every task
+    /// attempt reaches this path, and during a gateway outage that is
+    /// millions of attempts against a table whose rows are wide; one stamp
+    /// per hour per URI carries the same horizon at a fraction of the WAL.
+    ///
+    /// Best-effort: a miss here only means an earlier re-probe.
+    async fn mark_offchain_transient_failure(db: &DatabaseConnection, uri: &str) {
+        let now = chrono::Utc::now().fixed_offset();
+        if let Err(db_err) = offchain_metadata::Entity::update_many()
+            .col_expr(offchain_metadata::Column::UpdatedAt, Expr::value(now))
+            .filter(offchain_metadata::Column::MetadataUrl.eq(uri))
+            .filter(
+                offchain_metadata::Column::Metadata
+                    .eq(serde_json::Value::String("processing".to_string())),
+            )
+            .filter(Expr::cust(
+                "(offchain_metadata.updated_at IS NULL
+                  OR offchain_metadata.updated_at < now() - interval '1 hour')",
+            ))
+            .exec(db)
+            .await
+        {
+            warn!("Failed to stamp transient failure for {}: {}", uri, db_err);
+        }
+    }
+
     /// On permanent failure, replace metadata='processing' with an error value so
     /// the daily cron (which filters metadata='processing') stops re-creating this task.
     /// Only overwrites metadata that is still 'processing' — never clobber real metadata.
@@ -326,11 +395,13 @@ impl BackgroundTaskRunner {
         db: &DatabaseConnection,
         uri: &str,
         error_msg: &str,
+        status_code: Option<&str>,
     ) -> Result<(), IngesterError> {
         let now = chrono::Utc::now().fixed_offset();
         let error_metadata = serde_json::json!({
             "error": "permanent_failure",
-            "msg": error_msg
+            "msg": error_msg,
+            "code": status_code,
         });
         offchain_metadata::Entity::update_many()
             .col_expr(
@@ -340,9 +411,19 @@ impl BackgroundTaskRunner {
             .col_expr(offchain_metadata::Column::Reindex, Expr::value(false))
             .col_expr(offchain_metadata::Column::UpdatedAt, Expr::value(now))
             .filter(offchain_metadata::Column::MetadataUrl.eq(uri))
+            // Guard against overwriting a successfully fetched document, but do
+            // refresh an existing permanent-failure marker: a horizon-driven
+            // re-probe that fails again must push updated_at forward, otherwise
+            // the row stays "stale" and is re-probed on every account touch.
             .filter(
-                offchain_metadata::Column::Metadata
-                    .eq(serde_json::Value::String("processing".to_string())),
+                Condition::any()
+                    .add(
+                        offchain_metadata::Column::Metadata
+                            .eq(serde_json::Value::String("processing".to_string())),
+                    )
+                    .add(Expr::cust(
+                        "offchain_metadata.metadata->>'error' = 'permanent_failure'",
+                    )),
             )
             .exec(db)
             .await

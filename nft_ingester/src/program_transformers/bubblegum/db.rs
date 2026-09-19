@@ -8,13 +8,13 @@ use digital_asset_types::dao::{
     CollectionsInfo, CreatorInfo, CreatorsInfo,
 };
 use log::{debug, error};
+use mpl_account_compression::events::ChangeLogEventV1;
 use mpl_bubblegum::{
     types::{Collection, Creator},
     Flags,
 };
 use sea_orm::{query::*, sea_query::OnConflict, ActiveValue::Set, DbBackend, EntityTrait};
 use sea_orm::{ActiveValue, ColumnTrait};
-use mpl_account_compression::events::ChangeLogEventV1;
 
 pub async fn save_changelog_event<'c, T>(
     change_log_event: &ChangeLogEventV1,
@@ -837,6 +837,12 @@ where
             ELSE asset.creators_info
         END
         WHERE asset.id = excluded.id
+          AND (CASE
+            WHEN (asset.seq != 0 OR asset.seq IS NULL) AND
+                ((excluded.creators_info->>'seq')::bigint >= (asset.creators_info->>'seq')::bigint OR (asset.creators_info->>'seq') IS NULL)
+            THEN excluded.creators_info
+            ELSE asset.creators_info
+        END) IS DISTINCT FROM asset.creators_info
         "#,
         vec![asset_id.into(), Some(creators_info_json).into()],
     );
@@ -881,6 +887,12 @@ where
             ELSE asset.creators_info
         END
         WHERE asset.id = excluded.id
+          AND (CASE
+            WHEN (asset.seq != 0 OR asset.seq IS NULL) AND
+                ((excluded.creators_info->>'seq')::bigint >= (asset.creators_info->>'seq')::bigint OR (asset.creators_info->>'seq') IS NULL)
+            THEN excluded.creators_info
+            ELSE asset.creators_info
+        END) IS DISTINCT FROM asset.creators_info
         "#,
         vec![asset_id.into(), Some(creators_info_json).into()],
     );

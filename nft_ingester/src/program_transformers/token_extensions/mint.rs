@@ -1,7 +1,10 @@
 use crate::{
     error::IngesterError,
     program_transformers::{
-        asset_upserts::{upsert_assets_token_account_columns, AssetTokenAccountColumns},
+        asset_upserts::{
+            download_task_warranted, guard_asset_data_v2_noop, guard_offchain_insert_repair,
+            upsert_assets_token_account_columns, AssetTokenAccountColumns,
+        },
         utils::find_model_with_retry,
     },
     tasks::{DownloadMetadata, IntoTaskData, TaskData},
@@ -9,7 +12,9 @@ use crate::{
 use blockbuster::programs::token_extensions::{
     extension::ShadowMetadata, MintAccount, MintAccountExtensions,
 };
+use cadence_macros::statsd_count;
 use chrono::Utc;
+use common::metric;
 use digital_asset_types::dao::{
     asset, asset_data_v2, offchain_metadata, owners,
     sea_orm_active_enums::{
@@ -29,7 +34,9 @@ const RETRY_INTERVALS: &[u64] = &[0, 5, 10];
 
 // Helper function to convert OptionalNonZeroPubkey to Option<Pubkey>
 // OptionalNonZeroPubkey uses all-zeros to represent None
-fn optional_pubkey_to_option(opt_pubkey: spl_pod::optional_keys::OptionalNonZeroPubkey) -> Option<Pubkey> {
+fn optional_pubkey_to_option(
+    opt_pubkey: spl_pod::optional_keys::OptionalNonZeroPubkey,
+) -> Option<Pubkey> {
     let bytes: &[u8; 32] = bytemuck::cast_ref(&opt_pubkey);
     if bytes.iter().all(|&b| b == 0) {
         None
@@ -70,7 +77,8 @@ pub async fn handle_token_extensions_mint_account<'a, 'b, 'c>(
     let metadata_to_use = if let Some(metadata) = sanitized_extensions.metadata.clone() {
         Some(metadata)
     } else if let Some(metadata_pointer) = &sanitized_extensions.metadata_pointer {
-        let metadata_addr_opt: Option<Pubkey> = optional_pubkey_to_option(metadata_pointer.metadata_address);
+        let metadata_addr_opt: Option<Pubkey> =
+            optional_pubkey_to_option(metadata_pointer.metadata_address);
         if let Some(metadata_addr) = metadata_addr_opt {
             let metadata_addr_bytes = metadata_addr.to_bytes().to_vec();
             let metadata_asset_data = asset_data_v2::Entity::find_by_id(metadata_addr_bytes)
@@ -128,9 +136,9 @@ pub async fn handle_token_extensions_mint_account<'a, 'b, 'c>(
             false
         };
 
-        insert_offchain_metadata(&metadata, &txn).await?;
+        let offchain_rows = insert_offchain_metadata(&metadata, &txn).await?;
 
-        upsert_asset_data_v2(
+        let asset_data_rows = upsert_asset_data_v2(
             &metadata,
             &metadata,
             key_bytes.clone(),
@@ -139,7 +147,15 @@ pub async fn handle_token_extensions_mint_account<'a, 'b, 'c>(
         )
         .await?;
 
-        task = Some(create_task(&metadata, key_bytes.clone())?);
+        // A mint touch that neither introduced a new URI nor changed stored
+        // metadata is no evidence the off-chain document changed — skip the task.
+        if download_task_warranted(offchain_rows, asset_data_rows) {
+            task = Some(create_task(&metadata, key_bytes.clone())?);
+        } else {
+            metric! {
+                statsd_count!("ingester.bgtask.noop_metadata_skip", 1);
+            }
+        }
 
         // Return metadata only if we determined it changed and we need to update pointing mints
         if should_update_pointing_mints {
@@ -223,13 +239,8 @@ pub async fn handle_token_extensions_mint_account<'a, 'b, 'c>(
     Ok(task)
 }
 
+// A mint with no metadata extension only becomes an asset once it is a single-supply NFT.
 fn should_upsert_asset(m: &MintAccount) -> bool {
-    // Don't create assets for zero-supply metadata container mints
-    if m.account.supply == 0 {
-        return false;
-    }
-
-    // Token Group Member NFTs are now indexed with their group address in collections_info
     is_token_nft(m) || m.extensions.metadata.is_some() || m.extensions.metadata_pointer.is_some()
 }
 
@@ -268,26 +279,8 @@ async fn insert_into_tokens_table(
         extensions: Set(Some(extensions.clone())),
     };
 
-    let mut tokens_query = tokens::Entity::insert(tokens_model)
-        .on_conflict(
-            OnConflict::columns([tokens::Column::Mint])
-                .update_columns([
-                    tokens::Column::Supply,
-                    tokens::Column::TokenProgram,
-                    tokens::Column::MintAuthority,
-                    tokens::Column::CloseAuthority,
-                    tokens::Column::Extensions,
-                    tokens::Column::SlotUpdated,
-                    tokens::Column::Decimals,
-                    tokens::Column::FreezeAuthority,
-                ])
-                .to_owned(),
-        )
-        .build(DbBackend::Postgres);
-    tokens_query.sql = format!(
-        "{} WHERE excluded.slot_updated >= tokens.slot_updated",
-        tokens_query.sql
-    );
+    let tokens_query =
+        super::super::token::token_mint_upsert(tokens_model, tokens::Column::Extensions);
 
     txn.execute(tokens_query)
         .await
@@ -296,10 +289,11 @@ async fn insert_into_tokens_table(
     Ok(())
 }
 
+/// Returns the number of rows written (zero when the URI is already stored).
 async fn insert_offchain_metadata(
     metadata: &ShadowMetadata,
     txn: &DatabaseTransaction,
-) -> Result<(), IngesterError> {
+) -> Result<u64, IngesterError> {
     let offchain_metadata_model = offchain_metadata::ActiveModel {
         metadata_url: Set(metadata.uri.trim().to_string()),
         metadata: Set(JsonValue::String("processing".to_string())),
@@ -307,26 +301,29 @@ async fn insert_offchain_metadata(
         reindex: Set(true),
         ..Default::default()
     };
-    let offchain_metadata_query = offchain_metadata::Entity::insert(offchain_metadata_model)
+    let mut offchain_metadata_query = offchain_metadata::Entity::insert(offchain_metadata_model)
         .on_conflict(
             OnConflict::columns([offchain_metadata::Column::MetadataUrl])
-                .do_nothing()
+                .update_columns([offchain_metadata::Column::Reindex])
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
-    txn.execute(offchain_metadata_query)
+    offchain_metadata_query.sql = guard_offchain_insert_repair(offchain_metadata_query.sql);
+    let res = txn
+        .execute(offchain_metadata_query)
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-    Ok(())
+    Ok(res.rows_affected())
 }
 
+/// Returns the number of rows written (zero when nothing stored would change).
 async fn upsert_asset_data_v2(
     metadata: &ShadowMetadata,
     sanitized_metadata: &ShadowMetadata,
     key_bytes: Vec<u8>,
     slot: i64,
     txn: &DatabaseTransaction,
-) -> Result<(), IngesterError> {
+) -> Result<u64, IngesterError> {
     let metadata_json = serde_json::to_value(sanitized_metadata.clone())
         .map_err(|e| IngesterError::SerializatonError(e.to_string()))?;
     let asset_data_model = asset_data_v2::ActiveModel {
@@ -354,14 +351,12 @@ async fn upsert_asset_data_v2(
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
-    asset_data_query.sql = format!(
-        "{} WHERE excluded.slot_updated >= asset_data_v2.slot_updated",
-        asset_data_query.sql
-    );
-    txn.execute(asset_data_query)
+    asset_data_query.sql = guard_asset_data_v2_noop(asset_data_query.sql);
+    let res = txn
+        .execute(asset_data_query)
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
-    Ok(())
+    Ok(res.rows_affected())
 }
 
 async fn upsert_asset(
@@ -425,10 +420,13 @@ async fn upsert_asset(
         false => SpecificationAssetClass::FungibleToken,
     };
 
-    let t22_metadata_addr = sanitized_extensions.metadata_pointer.as_ref().and_then(|mp| {
-        let addr_opt: Option<Pubkey> = optional_pubkey_to_option(mp.metadata_address);
-        addr_opt.map(|addr| addr.to_bytes().to_vec())
-    });
+    let t22_metadata_addr = sanitized_extensions
+        .metadata_pointer
+        .as_ref()
+        .and_then(|mp| {
+            let addr_opt: Option<Pubkey> = optional_pubkey_to_option(mp.metadata_address);
+            addr_opt.map(|addr| addr.to_bytes().to_vec())
+        });
 
     // Determine metadata_account_id based on whether metadata is inline or external
     let metadata_account_id = if sanitized_extensions.metadata.is_some() {
@@ -503,29 +501,7 @@ async fn upsert_asset(
     let mut asset_query = asset::Entity::insert(asset_model)
         .on_conflict(
             OnConflict::columns([asset::Column::Id])
-                .update_columns(vec![
-                    asset::Column::OwnerType,
-                    asset::Column::Supply,
-                    asset::Column::SupplyMint,
-                    asset::Column::SpecificationVersion,
-                    asset::Column::SpecificationAssetClass,
-                    asset::Column::Nonce,
-                    asset::Column::Seq,
-                    asset::Column::Compressed,
-                    asset::Column::Compressible,
-                    asset::Column::AssetData,
-                    asset::Column::SlotUpdatedMintAccount,
-                    asset::Column::Burnt,
-                    asset::Column::AuthorityAddress,
-                    asset::Column::AuthoritySeq,
-                    asset::Column::AuthoritySlotUpdated,
-                    asset::Column::AuthorityScopes,
-                    asset::Column::AuthoritiesInfo,
-                    asset::Column::MintExtensions,
-                    asset::Column::MetadataAccountId,
-                    asset::Column::T22MetadataAddress,
-                    asset::Column::CollectionsInfo,
-                ])
+                .update_columns(mint_update_columns(m))
                 .to_owned(),
         )
         .build(DbBackend::Postgres);
@@ -537,6 +513,36 @@ async fn upsert_asset(
         .await
         .map_err(|db_err| IngesterError::AssetIndexError(db_err.to_string()))?;
     Ok(())
+}
+
+// `burnt` is owned by the account-closure handler; a mint update never clears it.
+// A zero-supply update keeps the class an earlier non-zero supply established.
+fn mint_update_columns(m: &MintAccount) -> Vec<asset::Column> {
+    let mut columns = vec![
+        asset::Column::Supply,
+        asset::Column::SupplyMint,
+        asset::Column::SpecificationVersion,
+        asset::Column::Nonce,
+        asset::Column::Seq,
+        asset::Column::Compressed,
+        asset::Column::Compressible,
+        asset::Column::AssetData,
+        asset::Column::SlotUpdatedMintAccount,
+        asset::Column::AuthorityAddress,
+        asset::Column::AuthoritySeq,
+        asset::Column::AuthoritySlotUpdated,
+        asset::Column::AuthorityScopes,
+        asset::Column::AuthoritiesInfo,
+        asset::Column::MintExtensions,
+        asset::Column::MetadataAccountId,
+        asset::Column::T22MetadataAddress,
+        asset::Column::CollectionsInfo,
+    ];
+    if m.account.supply > 0 {
+        columns.push(asset::Column::OwnerType);
+        columns.push(asset::Column::SpecificationAssetClass);
+    }
+    columns
 }
 
 fn create_task(metadata: &ShadowMetadata, key_bytes: Vec<u8>) -> Result<TaskData, IngesterError> {
